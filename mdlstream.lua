@@ -4,28 +4,33 @@
 -- Example file sizes:
 -- alyx.mdl len      : 444308(compressed: 390772), about 433kb
 -- kleiner.mdl len   : 248252,                     about 240kb
+MDLStream = {}
 
-local file_formats = {[".mdl"] = true, [".vvd"] = true, [".vtx"] = true}
+-- local file_formats = {[".mdl"] = true, [".vvd"] = true, [".vtx"] = true}
 
-local max_file_size      = 8000000 -- bytes, 8 MB
+-- local max_file_size      = 8000000 -- bytes, 8 MB
 
 --- Konstants
-local max_msg_size         = 64000 - 3 - 1 - 3 - 3   -- bytes, 0.064 MB, around 124 msgs to transmit a 8 MB file
+local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 - 3 - 3  -- bytes, 0.064 MB, around 124 msgs to transmit a 8 MB file
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
 -- 3 for #content length
 -- 3 for #content slice ending position
+-- 3 for uid of every accepted request
+-- 3 for uid of content clientside
 
-local max_total_msg_size   = 255000  -- bytes, a limit on client msg queue(to be sent) size
-local netlib_buffer_size   = 255000  -- bytes, 0.255 MB, internal reliable buffer
+local size_3bytes = 24
 
 local lzma   = util.Compress
 local delzma = util.Decompress
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
+
 local netlib_wuint        = net.WriteUInt
+local netlib_ruint        = net.ReadUInt
+
 local netlib_wbool        = net.WriteBool
 local netlib_rbool        = net.ReadBool
 
@@ -33,10 +38,12 @@ local str_sub             = string.sub
 local tblib_concat        = table.concat
 
 if CLIENT then
+    local netlib_wstring  = net.WriteString
     local netlib_wdata    = net.WriteData
     local netlib_toserver = net.SendToServer
 
-    -- DO QUEUE
+    local content_uid  = content_uid or 1
+    local content_temp = content_temp or {}
 
     local function bytes_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
@@ -56,39 +63,50 @@ if CLIENT then
         return tblib_concat(_t, ",")
     end
 
-    local _content = ""
-
     local function send_request(path)
+        content_uid = content_uid + 1
+
         netlib_start("mdlstream_request")
-        net.WriteString(path)
+        netlib_wstring(path)
+        netlib_wuint(content_uid, size_3bytes)
         netlib_toserver()
 
-        _content = lzma(serialize_table(bytes_table(path)))
+        content_temp[content_uid] = lzma(serialize_table(bytes_table(path)))
     end
 
     netlib_set_receiver("mdlstream_svblink", function()
-        local blink_mode = netlib_rbool()
+        local blink_mode   = netlib_rbool()
+        local uid          = netlib_ruint(size_3bytes)
 
-        netlib_start("mdlstream_bslice")
+        netlib_start("mdlstream_slice")
 
+        netlib_wuint(uid, size_3bytes)
+
+        local _content_uid
         if blink_mode == false then
+            _content_uid = netlib_ruint(size_3bytes)
+            local _content     = content_temp[_content_uid]
+
             local exceeds_max = #_content > max_msg_size
             netlib_wbool(exceeds_max)
 
             if not exceeds_max then
-                netlib_wuint(#_content, 24)
+                netlib_wuint(#_content, size_3bytes)
                 netlib_wdata(_content, #_content)
             else
                 local _endpos = max_msg_size
                 local _slice = str_sub(_content, 1, _endpos)
 
-                netlib_wuint(#_slice, 24)
+                netlib_wuint(#_slice, size_3bytes)
                 netlib_wdata(_slice, #_slice)
 
-                netlib_wuint(_endpos, 24)
+                netlib_wuint(_endpos, size_3bytes)
             end
         elseif blink_mode == true then
-            local pos = net.ReadUInt(24)
+            local pos          = netlib_ruint(size_3bytes)
+            _content_uid = netlib_ruint(size_3bytes)
+
+            local _content = content_temp[_content_uid]
             local exceeds_max = #_content - pos > max_msg_size
 
             netlib_wbool(exceeds_max)
@@ -96,32 +114,73 @@ if CLIENT then
             if not exceeds_max then
                 local _slice = str_sub(_content, pos + 1, #_content)
 
-                netlib_wuint(#_slice, 24)
+                netlib_wuint(#_slice, size_3bytes)
                 netlib_wdata(_slice, #_slice)
             else
                 local _endpos = pos + max_msg_size
                 local _slice = str_sub(_content, pos + 1, _endpos)
 
-                netlib_wuint(#_slice, 24)
+                netlib_wuint(#_slice, size_3bytes)
                 netlib_wdata(_slice, #_slice)
 
-                netlib_wuint(_endpos, 24)
+                netlib_wuint(_endpos, size_3bytes)
             end
         end
+
+        netlib_wuint(_content_uid, size_3bytes)
+
+        netlib_wuint(netlib_ruint(size_3bytes), size_3bytes)
 
         netlib_toserver()
     end)
 
-    send_request("models/alyx.phy")
-    send_request("models/alyx.mdl")
+    MDLStream.SendRequest = send_request
+    -- send_request("models/alyx.phy")
+    -- send_request("models/alyx.mdl")
+    -- send_request("models/dog.mdl")
 else
     local tonumber     = tonumber
     local str_find     = string.find
     local tblib_insert = table.insert
     local netlib_send  = net.Send
 
+    local uid = uid or 1 -- included in msg
+    local path_uid = path_uid or 1
+
+    --- Client Request:
+    -- writes path:string
+    -- writes clientside uid:int for content
+    --
+    --- Server receives Request:
+    -- reads path
+    -- writes mode:bool
+    -- writes uid:int for serverside slice
+    -- reads and writes uid for clientside content
+    -- ==> Server starts blink
+    --
+    --- Client receives Blink:
+    -- reads mode
+    -- reads uid(serverside slice) that reminds server
+    -- writes uid(serverside slice)
+    -- writes mode(slice type)
+    -- writes int content size
+    -- (optional if) reads int last endpos (content uid read: uncertain position)
+    -- writes data
+    -- (optional if) writes int endpos
+    -- writes uid(clientside content)
+    -- ==> Client starts slice
+    --
+    --- Server receives Slice:
+    -- reads uid(serverside slice)
+    -- reads bool(slice type)
+    -- reads int(content size)
+    -- reads data
+    -- (optional if) writes bool
+    --               writes int(serverside slice)
+    --               reads and writes uid(clientside content)
+    --               ==> Server starts blink
     util.AddNetworkString("mdlstream_request")
-    util.AddNetworkString("mdlstream_bslice")
+    util.AddNetworkString("mdlstream_slice")
     util.AddNetworkString("mdlstream_svblink")
 
     local function deserialize_table(_s)
@@ -143,59 +202,71 @@ else
         return ret
     end
 
-    local _context_path = ""
+    local context_paths = context_paths or {}
+    local slices_temp   = slices_temp or {}
 
     netlib_set_receiver("mdlstream_request", function(_, user)
-        _context_path = net.ReadString()
+        path_uid = path_uid + 1
+        context_paths[path_uid] = net.ReadString()
 
-        --if not file.Exists(_context_path, "GAME") then
+        --if not file.Exists(context_paths[uid], "GAME") then
+            uid = uid + 1
+            slices_temp[uid] = {}
             netlib_start("mdlstream_svblink")
-            netlib_wbool(0)
+            netlib_wbool(false)
+            netlib_wuint(uid, size_3bytes)
+            netlib_wuint(netlib_ruint(size_3bytes), size_3bytes)
+
+            netlib_wuint(path_uid, size_3bytes)
+
             netlib_send(user)
         --end
     end)
 
-    local _slices = {} -- FIXME
-
-    netlib_set_receiver("mdlstream_bslice", function(_, user)
+    netlib_set_receiver("mdlstream_slice", function(_, user)
+        local _uid       = netlib_ruint(size_3bytes)
         local slice_type = netlib_rbool()
 
-        local content = net.ReadData(net.ReadUInt(24))
-
-        file.CreateDir(string.GetPathFromFilename(_context_path))
+        local content = net.ReadData(netlib_ruint(size_3bytes))
 
         if slice_type == false then
             local bytes
 
-            if #_slices == 0 then
+            if #slices_temp[_uid] == 0 then
                 bytes = deserialize_table(delzma(content))
             else
-                tblib_insert(_slices, content)
+                tblib_insert(slices_temp[_uid], content)
 
-                bytes = deserialize_table(delzma(tblib_concat(_slices)))
+                bytes = deserialize_table(delzma(tblib_concat(slices_temp[_uid])))
             end
 
-            local _f = file.Open(_context_path, "wb", "DATA")
+            netlib_ruint(size_3bytes)
+            local _path_uid = netlib_ruint(size_3bytes)
+
+            file.CreateDir(string.GetPathFromFilename(context_paths[_path_uid]))
+
+            local _file = file.Open(context_paths[_path_uid], "wb", "DATA")
 
             for i = 1, #bytes do
-                _f:WriteByte(bytes[i])
+                _file:WriteByte(bytes[i])
             end
 
-            _f:Close()
+            _file:Close()
         elseif slice_type == true then
-            tblib_insert(_slices, content)
+            tblib_insert(slices_temp[_uid], content)
 
             netlib_start("mdlstream_svblink")
             netlib_wbool(true)
-            netlib_wuint(net.ReadUInt(24), 24)
+            netlib_wuint(_uid, size_3bytes)
+            --print(netlib_ruint(size_3bytes))
+            netlib_wuint(netlib_ruint(size_3bytes), size_3bytes)
+
+            --print(netlib_ruint(size_3bytes))
+            netlib_wuint(netlib_ruint(size_3bytes), size_3bytes)
+
+            netlib_wuint(netlib_ruint(size_3bytes), size_3bytes)
+
             netlib_send(user)
         end
     end)
 end
-
--- if SERVER then
---     local e = ents.Create("prop_ragdoll")
---     e:SetModel("data/models/alyx.mdl")
---     e:SetPos(Entity(1):GetPos())
---     e:Spawn()
--- end
