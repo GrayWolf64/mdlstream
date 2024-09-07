@@ -11,7 +11,7 @@ MDLStream = {}
 -- local max_file_size      = 8000000 -- bytes, 8 MB
 
 --- Konstants
-local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 - 3 - 3  -- bytes, 0.064 MB, around 124 msgs to transmit a 8 MB file
+local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 - 3 - 3  -- bytes, 0.063 MB, around 100 msgs to transmit a 8 MB file
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
@@ -19,6 +19,7 @@ local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 - 3 - 3  -- bytes, 0.064 
 -- 3 for #content slice ending position
 -- 3 for uid of every accepted request
 -- 3 for uid of content clientside
+-- 3 for uid of content path
 
 local size_3bytes = 24
 
