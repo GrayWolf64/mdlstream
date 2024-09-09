@@ -175,7 +175,6 @@ else
     local delzma       = util.Decompress
     local tonumber     = tonumber
     local str_find     = string.find
-    local tblib_insert = table.insert
     local netlib_send  = net.Send
 
     local uid = uid or 1 -- included in msg
@@ -275,7 +274,7 @@ else
             if #slices_temp[_uid] == 0 then
                 bytes = deserialize_table(delzma(content))
             else
-                tblib_insert(slices_temp[_uid], content)
+              slices_temp[_uid][#slices_temp[_uid] + 1] = content
 
                 bytes = deserialize_table(delzma(tblib_concat(slices_temp[_uid])))
             end
@@ -293,7 +292,7 @@ else
 
             _file:Close()
         elseif slice_type == true then
-            tblib_insert(slices_temp[_uid], content)
+            slices_temp[_uid][#slices_temp[_uid] + 1] = content
 
             netlib_start("mdlstream_svblink")
             netlib_wbool(true)
