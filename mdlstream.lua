@@ -274,7 +274,7 @@ else
             if #slices_temp[_uid] == 0 then
                 bytes = deserialize_table(delzma(content))
             else
-               slices_temp[_uid][#slices_temp[_uid] + 1] = content
+                slices_temp[_uid][#slices_temp[_uid] + 1] = content
 
                 bytes = deserialize_table(delzma(tblib_concat(slices_temp[_uid])))
             end
