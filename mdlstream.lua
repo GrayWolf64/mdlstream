@@ -53,8 +53,13 @@ if CLIENT then
     local errorstr_size_abnormal      = "MDLStream: Tries to send file larger than 8 MB, "
 
     local netlib_wstring  = net.WriteString
-    local netlib_wdata    = net.WriteData
     local netlib_toserver = net.SendToServer
+
+    local function netlib_wbdata(_data)
+        local _len = #_data
+        netlib_wuint(_len)
+        net.WriteData(_data, _len)
+    end
 
     local content_uid  = content_uid or 1 -- included in msg
     -- To ensure that we don't lose the identity of one file's content when this client request to send another
@@ -123,16 +128,11 @@ if CLIENT then
             netlib_wbool(exceeds_max)
 
             if not exceeds_max then
-                netlib_wuint(#_content)
-                netlib_wdata(_content, #_content)
+                netlib_wbdata(_content)
             else
-                local _endpos = max_msg_size
-                local _slice = str_sub(_content, 1, _endpos)
+                netlib_wbdata(str_sub(_content, 1, max_msg_size))
 
-                netlib_wuint(#_slice)
-                netlib_wdata(_slice, #_slice)
-
-                netlib_wuint(_endpos)
+                netlib_wuint(max_msg_size)
             end
         elseif blink_mode == true then
             local pos    = netlib_ruint()
@@ -144,16 +144,12 @@ if CLIENT then
             netlib_wbool(exceeds_max)
 
             if not exceeds_max then
-                local _slice = str_sub(_content, pos + 1, #_content)
-
-                netlib_wuint(#_slice)
-                netlib_wdata(_slice, #_slice)
+                netlib_wbdata(str_sub(_content, pos + 1, #_content))
             else
                 local _endpos = pos + max_msg_size
                 local _slice = str_sub(_content, pos + 1, _endpos)
 
-                netlib_wuint(#_slice)
-                netlib_wdata(_slice, #_slice)
+                netlib_wbdata(_slice)
 
                 netlib_wuint(_endpos)
             end
