@@ -191,7 +191,7 @@ else
             local _path = net.ReadString()
             local _uid  = netlib_ruint()
 
-            slice_temp[_uid] = {[1] = {}, [2] = _path} -- DO THIS
+            slice_temp[_uid] = {[1] = {}, [2] = _path, [3] = SysTime()}
 
             netlib_wuint(_uid)
 
@@ -225,6 +225,8 @@ else
             end
 
             _file:Close()
+
+            print("MDLStream: took " .. string.NiceTime(SysTime() - slice_temp[_uid][3]) .. " recv & build, " .. slice_temp[_uid][2], "from " .. user:SteamID64())
         elseif slice_type == true then
             slice_temp[_uid][1][#slice_temp[_uid][1] + 1] = content
 
