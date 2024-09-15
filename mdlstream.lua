@@ -42,13 +42,13 @@ local tblib_concat        = table.concat
 
 if CLIENT then
     local lzma   = util.Compress
+    local netlib_wstring  = net.WriteString
+    local netlib_toserver = net.SendToServer
+    local cfile_eof = FindMetaTable("File").EndOfFile
 
     local max_file_size      = 8000000 -- bytes, 8 MB
 
     local file_formats = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
-
-    local netlib_wstring  = net.WriteString
-    local netlib_toserver = net.SendToServer
 
     local function netlib_wbdata(_data)
         local _len = #_data
@@ -67,8 +67,10 @@ if CLIENT then
 
         local bytes = {}
 
-        while not _file:EndOfFile() do
-            bytes[#bytes + 1] = _file:ReadByte()
+        for i = 1, math.huge do
+            if cfile_eof(_file) then break end
+
+            bytes[i] = _file:ReadByte()
         end
 
         _file:Close()
