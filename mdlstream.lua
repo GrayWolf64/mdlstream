@@ -15,7 +15,7 @@
 -- Example file sizes:
 -- alyx.mdl len      : 444308(compressed: 390772), about 433kb
 -- kleiner.mdl len   : 248252,                     about 240kb
-MDLStream = {}
+mdlstream = {}
 
 --- Shared konstants(not necessarily)
 local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, around 100 msgs to transmit a 8 MB file
@@ -156,7 +156,7 @@ if CLIENT then
         pcall(content_temp[netlib_ruint()][3])
     end)
 
-    MDLStream.SendRequest = send_request
+    mdlstream.SendRequest = send_request
 
     --- Testing only
     -- send_request("models/alyx.phy", function() print("test success") end)
