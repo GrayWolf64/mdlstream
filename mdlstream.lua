@@ -83,17 +83,8 @@ if CLIENT then
     end
 
     local function send_request(path)
-        if not file_formats[string.GetExtensionFromFilename(path)] then
-            ErrorNoHalt("MDLStream: Tries to send unsupported file, ", path)
-
-            return false
-        end
-
-        if file.Size(path, "GAME") > max_file_size then
-            ErrorNoHalt("MDLStream: Tries to send file larger than 8 MB, ", path)
-
-            return false
-        end
+        assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "      .. path)
+        assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, " .. path)
 
         uid = uid + 1
         content_temp[uid] = {[1] = "", [2] = path}
