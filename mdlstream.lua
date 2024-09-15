@@ -4,6 +4,7 @@
 -- Specifications:
 -- Max file size: 8 MB
 -- Limited file formats
+-- Handshake styled transmission
 --
 -- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks ==> Client receives Blink
 -- ==> Client sends Slice ==> Server receives Slice ==> Server builds file(transmisson finished) / Server Blinks
@@ -16,8 +17,8 @@
 -- kleiner.mdl len   : 248252,                     about 240kb
 MDLStream = {}
 
---- Shared konstants
-local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3  -- bytes, 0.063 MB, around 100 msgs to transmit a 8 MB file
+--- Shared konstants(not necessarily)
+local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, around 100 msgs to transmit a 8 MB file
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
@@ -26,7 +27,7 @@ local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3  -- bytes, 0.063 MB, arou
 -- 3 for uid of every accepted request, generated on client
 
 local size_3bytes = 24
--- every uint we read and write will be a 24-bit one, max = 16777215
+-- every uint we read and write will be a 24-bit one, max = 16777215, definitely abundant
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -41,10 +42,11 @@ local str_sub             = string.sub
 local tblib_concat        = table.concat
 
 if CLIENT then
-    local lzma   = util.Compress
+    local lzma            = util.Compress
     local netlib_wstring  = net.WriteString
     local netlib_toserver = net.SendToServer
-    local cfile_eof = FindMetaTable("File").EndOfFile
+    local cfile_eof       = FindMetaTable("File").EndOfFile
+    local fun_donothing   = function() end
 
     local max_file_size      = 8000000 -- bytes, 8 MB
 
@@ -56,9 +58,10 @@ if CLIENT then
         net.WriteData(_data, _len)
     end
 
-    local uid  = uid or 1 -- included in msg
+    local uid = uid or 1 -- included in msg
     -- To ensure that we don't lose the identity of one file's content when this client request to send another
     -- which leads to overriding of file content
+    -- With the specified player and uid, we can tell every file
 
     local content_temp = content_temp or {}
 
@@ -82,12 +85,16 @@ if CLIENT then
         return tblib_concat(_t, ",")
     end
 
-    local function send_request(path)
+    local function send_request(path, callback)
         assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "      .. path)
         assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, " .. path)
 
+        if not callback or not isfunction(callback) then
+            callback = fun_donothing
+        end
+
         uid = uid + 1
-        content_temp[uid] = {[1] = "", [2] = path}
+        content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
 
         netlib_start("mdlstream_request")
         netlib_wstring(path)
@@ -145,20 +152,27 @@ if CLIENT then
         netlib_toserver()
     end)
 
+    netlib_set_receiver("mdlstream_success", function()
+        pcall(content_temp[netlib_ruint()][3])
+    end)
+
     MDLStream.SendRequest = send_request
 
-    send_request("models/alyx.phy")
-    send_request("models/alyx.mdl")
-    send_request("models/dog.mdl")
+    --- Testing only
+    -- send_request("models/alyx.phy", function() print("test success") end)
+    -- send_request("models/alyx.mdl")
+    -- send_request("models/dog.mdl")
 else
     local delzma       = util.Decompress
     local tonumber     = tonumber
     local str_find     = string.find
     local netlib_send  = net.Send
+    local systime      = SysTime
 
-    util.AddNetworkString("mdlstream_request")
-    util.AddNetworkString("mdlstream_slice")
-    util.AddNetworkString("mdlstream_svblink")
+    util.AddNetworkString"mdlstream_request"
+    util.AddNetworkString"mdlstream_slice"
+    util.AddNetworkString"mdlstream_svblink"
+    util.AddNetworkString"mdlstream_success"
 
     local function deserialize_table(_s)
         local ret = {}
@@ -191,7 +205,7 @@ else
             local _path = net.ReadString()
             local _uid  = netlib_ruint()
 
-            slice_temp[_uid] = {[1] = {}, [2] = _path, [3] = SysTime()}
+            slice_temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
             netlib_wuint(_uid)
 
@@ -226,7 +240,14 @@ else
 
             _file:Close()
 
-            print("MDLStream: took " .. string.NiceTime(SysTime() - slice_temp[_uid][3]) .. " recv & build, " .. slice_temp[_uid][2], "from " .. user:SteamID64())
+            print("MDLStream: took " .. string.NiceTime(systime() - slice_temp[_uid][3])
+                    .. " recv & build, " .. slice_temp[_uid][2], "from " .. user:SteamID64())
+
+            netlib_start("mdlstream_success")
+
+            netlib_wuint(_uid)
+
+            netlib_send(user)
         elseif slice_type == true then
             slice_temp[_uid][1][#slice_temp[_uid][1] + 1] = content
 
