@@ -96,6 +96,7 @@ if CLIENT then
             datalen  = read_cint()
         }
 
+        _file:Close()
 
         if studiohdr_t.id[1] ~= determinant.id[1] or studiohdr_t.id[2] ~= determinant.id[2] or
             studiohdr_t.id[3] ~= determinant.id[3] or studiohdr_t.id[4] ~= determinant.id[4] then
@@ -142,7 +143,7 @@ if CLIENT then
     local function send_request(path, callback)
         assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "             .. path)
         assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, "        .. path)
-        assert(validate_header(path),                                  "MDLStream: Corrupted or intentionally bad file header, " .. path)
+        assert(validate_header(path),                               "MDLStream: Corrupted or intentionally bad file header, " .. path)
 
         if not callback or not isfunction(callback) then
             callback = fun_donothing
