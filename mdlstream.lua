@@ -10,11 +10,15 @@
 -- ==> Client sends frame ==> Server receives frame ==> Server builds file(transmisson finished) / Server Blinks
 -- ==> Client receives Blink ==> Client sends frame ==> ... Until all frames of file content are fully received, then build(transmisson finished)
 --
--- @author GrayWolf, RiceMCUT
+-- @author GrayWolf, RiceMCUT, Wolf109909
 --
 -- Example file sizes:
 -- alyx.mdl len      : 444308(compressed: 390772), about 433kb
 -- kleiner.mdl len   : 248252,                     about 240kb
+--
+-- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
+-- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel
+-- for some crucial hints on mdl header1
 mdlstream = {}
 
 --- Shared konstants(not necessarily)
@@ -28,6 +32,7 @@ local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, aroun
 
 local size_3bytes = 24
 -- every uint we read and write will be a 24-bit one, max = 16777215, definitely abundant
+local tonumber            = tonumber
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -56,6 +61,53 @@ if CLIENT then
         local _len = #_data
         netlib_wuint(_len)
         net.WriteData(_data, _len)
+    end
+
+    local determinant = {
+        id = {73, 68, 83, 84}, -- "IDST"
+        versions = {
+            [4]    = true, [6]  = true, [10] = true, [14] = true,
+            [2531] = true, [31] = true, [32] = true, [36] = true,
+            [37]   = true, [44] = true, [48] = true, [49] = true,
+            [52]   = true, [53] = true, [45] = true
+        } -- 45?
+    }
+
+    local function validate_header(_path)
+        local ext = string.GetExtensionFromFilename(_path)
+
+        if ext == "vvd" or ext == "phy" then return true end
+
+        local _file = file.Open(_path, "rb", "GAME")
+
+        local function read_cint()
+            return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)}
+        end
+
+        local function hext_to_int(_t)
+            return tonumber(string.format("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1]))
+        end
+
+        local studiohdr_t = {
+            id       = read_cint(),
+            version  = read_cint(),
+            checksum = read_cint(),
+            name     = _file:Read(64),
+            datalen  = read_cint()
+        }
+
+
+        if studiohdr_t.id[1] ~= determinant.id[1] or studiohdr_t.id[2] ~= determinant.id[2] or
+            studiohdr_t.id[3] ~= determinant.id[3] or studiohdr_t.id[4] ~= determinant.id[4] then
+            return false
+        end
+
+        if not determinant.versions[hext_to_int(studiohdr_t.version)]   then return false end
+        if not studiohdr_t.checksum or not #studiohdr_t.checksum == 4   then return false end
+        if not studiohdr_t.name                                         then return false end
+        if hext_to_int(studiohdr_t.datalen) ~= file.Size(_path, "GAME") then return false end
+
+        return true
     end
 
     local uid = uid or 1 -- included in msg
@@ -88,8 +140,9 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
-        assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "      .. path)
-        assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, " .. path)
+        assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "             .. path)
+        assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, "        .. path)
+        assert(validate_header(path),                                  "MDLStream: Corrupted or intentionally bad file header, " .. path)
 
         if not callback or not isfunction(callback) then
             callback = fun_donothing
@@ -178,17 +231,16 @@ if CLIENT then
     end)
 
     --- Testing only
-    -- if LocalPlayer() then
-    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-    --     send_request("models/alyx.mdl")
-    --     send_request("models/dog.mdl")
-    --     send_request("models/kleiner.mdl")
-    -- end
+    if LocalPlayer() then
+        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+        send_request("models/alyx.mdl")
+        send_request("models/dog.mdl")
+        send_request("models/kleiner.mdl")
+    end
 
     mdlstream.SendRequest = send_request
 else
     local delzma         = util.Decompress
-    local tonumber       = tonumber
     local str_find       = string.find
     local netlib_send    = net.Send
     local netlib_rstring = net.ReadString
