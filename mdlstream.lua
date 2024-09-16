@@ -6,7 +6,7 @@
 -- Limited file formats
 -- Handshake styled transmission
 --
--- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks ==> Client receives Blink
+-- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks(acknowledge) ==> Client receives Blink
 -- ==> Client sends Slice ==> Server receives Slice ==> Server builds file(transmisson finished) / Server Blinks
 -- ==> Client receives Blink ==> Client sends Slice ==> ... Until all slices of file content are fully received, then build(transmisson finished)
 --
@@ -46,11 +46,11 @@ if CLIENT then
     local netlib_wstring  = net.WriteString
     local netlib_toserver = net.SendToServer
     local cfile_eof       = FindMetaTable("File").EndOfFile
+    local cfile_rbyte     = FindMetaTable("File").ReadByte
     local fun_donothing   = function() end
 
-    local max_file_size      = 8000000 -- bytes, 8 MB
-
-    local file_formats = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
+    local max_file_size = 8000000 -- bytes, 8 MB
+    local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
 
     local function netlib_wbdata(_data)
         local _len = #_data
@@ -73,7 +73,7 @@ if CLIENT then
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
-            bytes[i] = _file:ReadByte()
+            bytes[i] = cfile_rbyte(_file)
         end
 
         _file:Close()
@@ -104,7 +104,7 @@ if CLIENT then
         return true
     end
 
-    netlib_set_receiver("mdlstream_svblink", function()
+    netlib_set_receiver("mdlstream_ack", function()
         local blink_mode = netlib_rbool()
         local _uid       = netlib_ruint()
 
@@ -153,25 +153,38 @@ if CLIENT then
     end)
 
     netlib_set_receiver("mdlstream_success", function()
-        pcall(content_temp[netlib_ruint()][3])
+        local _uid = netlib_ruint()
+        --- Clears garbage on client's delicate computer
+        -- can we keep the path in cache to speed check-file process?
+        content_temp[_uid][1] = nil
+        content_temp[_uid][2] = nil
+
+        pcall(content_temp[_uid][3])
+
+        content_temp[_uid][3] = nil
     end)
 
-    mdlstream.SendRequest = send_request
-
     --- Testing only
-    -- send_request("models/alyx.phy", function() print("test success") end)
-    -- send_request("models/alyx.mdl")
-    -- send_request("models/dog.mdl")
+    -- if LocalPlayer() then
+    --     send_request("models/alyx.phy", function() print("test success") end)
+    --     send_request("models/alyx.mdl")
+    --     send_request("models/dog.mdl")
+    -- end
+
+    mdlstream.SendRequest = send_request
 else
-    local delzma       = util.Decompress
-    local tonumber     = tonumber
-    local str_find     = string.find
-    local netlib_send  = net.Send
-    local systime      = SysTime
+    local delzma         = util.Decompress
+    local tonumber       = tonumber
+    local str_find       = string.find
+    local netlib_send    = net.Send
+    local netlib_rstring = net.ReadString
+    local netlib_rdata   = net.ReadData
+    local systime        = SysTime
+    local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_request"
     util.AddNetworkString"mdlstream_slice"
-    util.AddNetworkString"mdlstream_svblink"
+    util.AddNetworkString"mdlstream_ack"
     util.AddNetworkString"mdlstream_success"
 
     local function deserialize_table(_s)
@@ -193,19 +206,20 @@ else
         return ret
     end
 
-    local slice_temp = slice_temp or {}
+    --- I don't want to go oop here, though it may be more elegant
+    local temp = temp or {}
 
     netlib_set_receiver("mdlstream_request", function(_, user)
         --- Whether checks file existence?
-        --if not file.Exists(context_paths[uid], "GAME") then
-            netlib_start("mdlstream_svblink")
+        --if not file.Exists(_path, "GAME") and not file.Exists(_path, "DATA") then
+            netlib_start("mdlstream_ack")
 
             netlib_wbool(false)
 
-            local _path = net.ReadString()
+            local _path = netlib_rstring()
             local _uid  = netlib_ruint()
 
-            slice_temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
+            temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
             netlib_wuint(_uid)
 
@@ -217,31 +231,38 @@ else
         local _uid       = netlib_ruint()
         local slice_type = netlib_rbool()
 
-        local content = net.ReadData(netlib_ruint())
+        local content = netlib_rdata(netlib_ruint())
 
         if slice_type == false then
             local bytes
 
-            if #slice_temp[_uid][1] == 0 then
+            if #temp[_uid][1] == 0 then
                 bytes = deserialize_table(delzma(content))
             else
-                slice_temp[_uid][1][#slice_temp[_uid][1] + 1] = content
+                temp[_uid][1][#temp[_uid][1] + 1] = content
 
-                bytes = deserialize_table(delzma(tblib_concat(slice_temp[_uid][1])))
+                bytes = deserialize_table(delzma(tblib_concat(temp[_uid][1])))
             end
 
-            file.CreateDir(string.GetPathFromFilename(slice_temp[_uid][2]))
+            local path = temp[_uid][2]
 
-            local _file = file.Open(slice_temp[_uid][2], "wb", "DATA")
+            file.CreateDir(string.GetPathFromFilename(path))
+
+            local _file = file.Open(path, "wb", "DATA")
 
             for i = 1, #bytes do
-                _file:WriteByte(bytes[i])
+                cfile_wbyte(_file, bytes[i])
             end
 
             _file:Close()
 
-            print("MDLStream: took " .. string.NiceTime(systime() - slice_temp[_uid][3])
-                    .. " recv & build, " .. slice_temp[_uid][2], "from " .. user:SteamID64())
+            print("MDLStream: took " .. string.NiceTime(systime() - temp[_uid][3])
+                    .. " recv & build, " .. path, "from " .. user:SteamID64())
+
+            --- Clears garbage
+            temp[_uid][1] = nil
+            temp[_uid][2] = nil
+            temp[_uid][3] = nil
 
             netlib_start("mdlstream_success")
 
@@ -249,9 +270,9 @@ else
 
             netlib_send(user)
         elseif slice_type == true then
-            slice_temp[_uid][1][#slice_temp[_uid][1] + 1] = content
+            temp[_uid][1][#temp[_uid][1] + 1] = content
 
-            netlib_start("mdlstream_svblink")
+            netlib_start("mdlstream_ack")
 
             netlib_wbool(true)
 
