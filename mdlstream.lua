@@ -178,12 +178,12 @@ if CLIENT then
     end)
 
     --- Testing only
-    if LocalPlayer() then
-        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-        send_request("models/alyx.mdl")
-        send_request("models/dog.mdl")
-        send_request("models/kleiner.mdl")
-    end
+    -- if LocalPlayer() then
+    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+    --     send_request("models/alyx.mdl")
+    --     send_request("models/dog.mdl")
+    --     send_request("models/kleiner.mdl")
+    -- end
 
     mdlstream.SendRequest = send_request
 else
