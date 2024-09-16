@@ -65,6 +65,8 @@ if CLIENT then
 
     local content_temp = content_temp or {}
 
+    local queue = queue or {}
+
     local function bytes_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
 
@@ -93,17 +95,26 @@ if CLIENT then
             callback = fun_donothing
         end
 
-        uid = uid + 1
+        local function action()
+            uid = uid + 1
 
-        content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
+            content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
 
-        netlib_start("mdlstream_request")
-        netlib_wstring(path)
-        netlib_wuint(uid)
-        netlib_toserver()
+            netlib_start("mdlstream_request")
+            netlib_wstring(path)
+            netlib_wuint(uid)
+            netlib_toserver()
+        end
 
-        return true
+        --- [2]: is this action called once
+        queue[#queue + 1] = {[1] = action, [2] = false}
     end
+
+    timer.Create("mdlstream_watcher", 1, 0, function()
+        if not queue[1] or queue[1][2] then return end
+        queue[1][1]()
+        queue[1][2] = true
+    end)
 
     netlib_set_receiver("mdlstream_ack", function()
         local blink_mode = netlib_rbool()
@@ -162,11 +173,13 @@ if CLIENT then
         pcall(content_temp[_uid][3])
 
         content_temp[_uid][3] = nil
+
+        table.remove(queue, 1)
     end)
 
     --- Testing only
     if LocalPlayer() then
-        send_request("models/alyx.phy", function() print("test success") end)
+        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
         send_request("models/alyx.mdl")
         send_request("models/dog.mdl")
         send_request("models/kleiner.mdl")
@@ -257,8 +270,11 @@ else
 
             _file:Close()
 
-            print("MDLStream: took " .. string.NiceTime(systime() - temp[_uid][3])
-                    .. " recv & build, " .. path, "from " .. user:SteamID64())
+            local tlapse = systime() - temp[_uid][3]
+
+            print("MDLStream: took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
+                    .. " recv & build, '" .. path .. "'", "from " .. user:SteamID64() .. ";"
+                    .. " avg spd, " .. string.NiceSize(file.Size(path, "DATA") / tlapse) .. "/s")
 
             --- Clears garbage
             temp[_uid][1] = nil
