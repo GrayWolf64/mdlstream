@@ -7,8 +7,8 @@
 -- Handshake styled transmission
 --
 -- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks(acknowledge) ==> Client receives Blink
--- ==> Client sends Slice ==> Server receives Slice ==> Server builds file(transmisson finished) / Server Blinks
--- ==> Client receives Blink ==> Client sends Slice ==> ... Until all slices of file content are fully received, then build(transmisson finished)
+-- ==> Client sends frame ==> Server receives frame ==> Server builds file(transmisson finished) / Server Blinks
+-- ==> Client receives Blink ==> Client sends frame ==> ... Until all frames of file content are fully received, then build(transmisson finished)
 --
 -- @author GrayWolf, RiceMCUT
 --
@@ -22,8 +22,8 @@ local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, aroun
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
--- 3 for #content(slice) length
--- 3 for #content slice ending position
+-- 3 for #content(slice / frame) length
+-- 3 for #content frame ending position
 -- 3 for uid of every accepted request, generated on client
 
 local size_3bytes = 24
@@ -94,6 +94,7 @@ if CLIENT then
         end
 
         uid = uid + 1
+
         content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
 
         netlib_start("mdlstream_request")
@@ -108,7 +109,7 @@ if CLIENT then
         local blink_mode = netlib_rbool()
         local _uid       = netlib_ruint()
 
-        netlib_start("mdlstream_slice")
+        netlib_start("mdlstream_frame")
 
         netlib_wuint(_uid)
 
@@ -130,8 +131,7 @@ if CLIENT then
             end
         elseif blink_mode == true then
             local _content = content_temp[_uid][1]
-
-            local pos    = netlib_ruint()
+            local pos      = netlib_ruint()
 
             local exceeds_max = #_content - pos > max_msg_size
 
@@ -141,9 +141,9 @@ if CLIENT then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
             else
                 local _endpos = pos + max_msg_size
-                local _slice = str_sub(_content, pos + 1, _endpos)
+                local _frame = str_sub(_content, pos + 1, _endpos)
 
-                netlib_wbdata(_slice)
+                netlib_wbdata(_frame)
 
                 netlib_wuint(_endpos)
             end
@@ -152,7 +152,7 @@ if CLIENT then
         netlib_toserver()
     end)
 
-    netlib_set_receiver("mdlstream_success", function()
+    netlib_set_receiver("mdlstream_fin", function()
         local _uid = netlib_ruint()
         --- Clears garbage on client's delicate computer
         -- can we keep the path in cache to speed check-file process?
@@ -165,11 +165,12 @@ if CLIENT then
     end)
 
     --- Testing only
-    -- if LocalPlayer() then
-    --     send_request("models/alyx.phy", function() print("test success") end)
-    --     send_request("models/alyx.mdl")
-    --     send_request("models/dog.mdl")
-    -- end
+    if LocalPlayer() then
+        send_request("models/alyx.phy", function() print("test success") end)
+        send_request("models/alyx.mdl")
+        send_request("models/dog.mdl")
+        send_request("models/kleiner.mdl")
+    end
 
     mdlstream.SendRequest = send_request
 else
@@ -183,9 +184,9 @@ else
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_request"
-    util.AddNetworkString"mdlstream_slice"
-    util.AddNetworkString"mdlstream_ack"
-    util.AddNetworkString"mdlstream_success"
+    util.AddNetworkString"mdlstream_frame" -- or Slice
+    util.AddNetworkString"mdlstream_ack" -- Acknowledge
+    util.AddNetworkString"mdlstream_fin" -- Final
 
     local function deserialize_table(_s)
         local ret = {}
@@ -227,13 +228,13 @@ else
         --end
     end)
 
-    netlib_set_receiver("mdlstream_slice", function(_, user)
+    netlib_set_receiver("mdlstream_frame", function(_, user)
         local _uid       = netlib_ruint()
-        local slice_type = netlib_rbool()
+        local frame_type = netlib_rbool()
 
         local content = netlib_rdata(netlib_ruint())
 
-        if slice_type == false then
+        if frame_type == false then
             local bytes
 
             if #temp[_uid][1] == 0 then
@@ -264,12 +265,12 @@ else
             temp[_uid][2] = nil
             temp[_uid][3] = nil
 
-            netlib_start("mdlstream_success")
+            netlib_start("mdlstream_fin")
 
             netlib_wuint(_uid)
 
             netlib_send(user)
-        elseif slice_type == true then
+        elseif frame_type == true then
             temp[_uid][1][#temp[_uid][1] + 1] = content
 
             netlib_start("mdlstream_ack")
