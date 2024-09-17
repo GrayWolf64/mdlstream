@@ -11,6 +11,9 @@ After server tells client that sync(transmission and file build) successful, cli
 
 Detailed workings please turn to the source file, easy to read.
 
+If you are a client, your first request must be fulfilled in order that your subsequent request be handled, and your subsequent request must
+be fulfilled so that your more subsequent request be handled.
+
 # Attention
 
 1. `mdlstream` currently doesn't check if the specified file already exists on server
