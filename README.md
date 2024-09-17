@@ -11,7 +11,7 @@ After server tells client that sync(transmission and file build) successful, cli
 
 Detailed workings please turn to the source file, easy to read.
 
-If you are a client, your requests are all enqueued clientside, each request action can run only if the previous one is already ran.
+If you are a client, your requests are all enqueued clientside, each request action can run only if the previous one is already ran(finished).
 
 # Attention
 
