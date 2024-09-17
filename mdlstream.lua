@@ -60,6 +60,8 @@ if CLIENT then
 
     local fun_donothing    = function() end
 
+    local realmax_msg_size = max_msg_size
+
     local max_file_size = 8000000 -- bytes, 8 MB
     local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
 
@@ -156,9 +158,9 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
-        assert(file_formats[str_ext_fromfile(path)], "MDLStream: Tries to send unsupported file, "               .. path)
-        assert(file_size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, "          .. path)
-        assert(validate_header(path),                               "MDLStream: Corrupted or intentionally bad file (header), " .. path)
+        assert(file_formats[str_ext_fromfile(path)],     "MDLStream: Tries to send unsupported file, "               .. path)
+        assert(file_size(path, "GAME") <= max_file_size, "MDLStream: Tries to send file larger than 8 MB, "          .. path)
+        assert(validate_header(path),                    "MDLStream: Corrupted or intentionally bad file (header), " .. path)
 
         if not callback or not isfunction(callback) then
             callback = fun_donothing
@@ -185,6 +187,22 @@ if CLIENT then
         queue[1][2] = true
     end)
 
+    --- Based on assumptions
+    -- In the worst case, a 8 MB file takes about 3334 messages to transmit,
+    -- we'd better hope that this client's net condition will get better,
+    -- otherwise, he will probably wait forever or quit and get some better gear
+    local function adjust_max_msg_size()
+        if not LocalPlayer() then return end
+
+        local ping = LocalPlayer():Ping()
+
+        if     ping <= 30                 then realmax_msg_size = max_msg_size
+        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 7000
+        elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 16000
+        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 30000
+        else                                   realmax_msg_size = 24000 end
+    end
+
     netlib_set_receiver("mdlstream_ack", function()
         local blink_mode = netlib_rbool()
         local _uid       = netlib_ruint()
@@ -193,34 +211,36 @@ if CLIENT then
 
         netlib_wuint(_uid)
 
+        adjust_max_msg_size()
+
         --- May better simplify section below
         if blink_mode == false then
             content_temp[_uid][1] = lzma(serialize_table(bytes_table(content_temp[_uid][2])))
 
             local _content = content_temp[_uid][1]
 
-            local exceeds_max = #_content > max_msg_size
+            local exceeds_max = #_content > realmax_msg_size
             netlib_wbool(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(_content)
             else
-                netlib_wbdata(str_sub(_content, 1, max_msg_size))
+                netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
 
-                netlib_wuint(max_msg_size)
+                netlib_wuint(realmax_msg_size)
             end
         elseif blink_mode == true then
             local _content = content_temp[_uid][1]
             local pos      = netlib_ruint()
 
-            local exceeds_max = #_content - pos > max_msg_size
+            local exceeds_max = #_content - pos > realmax_msg_size
 
             netlib_wbool(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
             else
-                local _endpos = pos + max_msg_size
+                local _endpos = pos + realmax_msg_size
                 local _frame = str_sub(_content, pos + 1, _endpos)
 
                 netlib_wbdata(_frame)
@@ -247,13 +267,13 @@ if CLIENT then
     end)
 
     --- Testing only
-    -- if LocalPlayer() then
-    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-    --     send_request("models/alyx.mdl")
-    --     send_request("models/alyx.vvd")
-    --     send_request("models/dog.mdl")
-    --     send_request("models/kleiner.mdl")
-    -- end
+    if LocalPlayer() then
+        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+        send_request("models/alyx.mdl")
+        send_request("models/alyx.vvd")
+        send_request("models/dog.mdl")
+        send_request("models/kleiner.mdl")
+    end
 
     mdlstream.SendRequest = send_request
 else
