@@ -315,22 +315,34 @@ else
     --- I don't want to go oop here, though it may be more elegant
     local temp = temp or {}
 
+    local queue = queue or {}
+
     netlib_set_receiver("mdlstream_request", function(_, user)
+        local _path = netlib_rstring()
+        local _uid  = netlib_ruint()
+
         --- Whether checks file existence?
         --if not file.Exists(_path, "GAME") and not file.Exists(_path, "DATA") then
+        local function action()
             netlib_start("mdlstream_ack")
 
             netlib_wbool(false)
-
-            local _path = netlib_rstring()
-            local _uid  = netlib_ruint()
 
             temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
             netlib_wuint(_uid)
 
             netlib_send(user)
+        end
+
+        queue[#queue + 1] = {[1] = action, [2] = false}
         --end
+    end)
+
+    timer.Create("mdlstream_watcher", 0.875, 0, function()
+        if not queue[1] or queue[1][2] then return end
+        queue[1][1]()
+        queue[1][2] = true
     end)
 
     netlib_set_receiver("mdlstream_frame", function(_, user)
@@ -372,6 +384,8 @@ else
             temp[_uid][1] = nil
             temp[_uid][2] = nil
             temp[_uid][3] = nil
+
+            table.remove(queue, 1)
 
             netlib_start("mdlstream_fin")
 
