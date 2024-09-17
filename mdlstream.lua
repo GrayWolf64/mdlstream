@@ -46,13 +46,19 @@ local netlib_rbool        = net.ReadBool
 local str_sub             = string.sub
 local tblib_concat        = table.concat
 
+local file_size           = file.Size
+
 if CLIENT then
-    local lzma            = util.Compress
-    local netlib_wstring  = net.WriteString
-    local netlib_toserver = net.SendToServer
-    local cfile_eof       = FindMetaTable("File").EndOfFile
-    local cfile_rbyte     = FindMetaTable("File").ReadByte
-    local fun_donothing   = function() end
+    local lzma             = util.Compress
+    local netlib_wstring   = net.WriteString
+    local netlib_toserver  = net.SendToServer
+
+    local cfile_eof        = FindMetaTable("File").EndOfFile
+    local cfile_rbyte      = FindMetaTable("File").ReadByte
+
+    local str_ext_fromfile = string.GetExtensionFromFilename
+
+    local fun_donothing    = function() end
 
     local max_file_size = 8000000 -- bytes, 8 MB
     local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
@@ -77,10 +83,12 @@ if CLIENT then
     }
 
     local function validate_header(_path)
-        local ext = string.GetExtensionFromFilename(_path)
+        local ext = str_ext_fromfile(_path)
 
         local _file = file.Open(_path, "rb", "GAME")
+        if not _file then return false end
 
+        --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
         if ext == "vvd" or ext == "phy" then
             if _file:Read(2) == "MZ" then return false end
 
@@ -113,7 +121,7 @@ if CLIENT then
         if not determinant.versions[hext_to_int(studiohdr_t.version)]   then return false end
         if not studiohdr_t.checksum or not #studiohdr_t.checksum == 4   then return false end
         if not studiohdr_t.name                                         then return false end
-        if hext_to_int(studiohdr_t.datalen) ~= file.Size(_path, "GAME") then return false end
+        if hext_to_int(studiohdr_t.datalen) ~= file_size(_path, "GAME") then return false end
 
         return true
     end
@@ -148,9 +156,9 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
-        assert(file_formats[string.GetExtensionFromFilename(path)], "MDLStream: Tries to send unsupported file, "             .. path)
-        assert(file.Size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, "        .. path)
-        assert(validate_header(path),                               "MDLStream: Corrupted or intentionally bad file header, " .. path)
+        assert(file_formats[str_ext_fromfile(path)], "MDLStream: Tries to send unsupported file, "               .. path)
+        assert(file_size(path, "GAME") <= max_file_size,            "MDLStream: Tries to send file larger than 8 MB, "          .. path)
+        assert(validate_header(path),                               "MDLStream: Corrupted or intentionally bad file (header), " .. path)
 
         if not callback or not isfunction(callback) then
             callback = fun_donothing
@@ -251,10 +259,13 @@ if CLIENT then
 else
     local delzma         = util.Decompress
     local str_find       = string.find
+
     local netlib_send    = net.Send
     local netlib_rstring = net.ReadString
     local netlib_rdata   = net.ReadData
+
     local systime        = SysTime
+
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_request"
@@ -335,7 +346,7 @@ else
 
             print("MDLStream: took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
                     .. " recv & build, '" .. path .. "'", "from " .. user:SteamID64() .. ";"
-                    .. " avg spd, " .. string.NiceSize(file.Size(path, "DATA") / tlapse) .. "/s")
+                    .. " avg spd, " .. string.NiceSize(file_size(path, "DATA") / tlapse) .. "/s")
 
             --- Clears garbage
             temp[_uid][1] = nil
