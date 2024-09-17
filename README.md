@@ -10,3 +10,11 @@ Sends a sync request on a specified file(size <= 8 MB), whose extension must be 
 After server tells client that sync(transmission and file build) successful, client will execute the given callback.
 
 Detailed workings please turn to the source file, easy to read.
+
+# Attention
+
+1. `mdlstream` currently doesn't check if the specified file already exists on server
+2. You may not use this lib(`mdlstream.lua`) if you *include this file and remove its boilerplate*; You may not use snippets from this lib
+if you don't include their original authors
+3. You may ask for permission if you would like to use this lib in non-free projects(addons)
+4. No warranty
