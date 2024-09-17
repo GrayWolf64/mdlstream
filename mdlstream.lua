@@ -197,7 +197,7 @@ if CLIENT then
         local ping = LocalPlayer():Ping()
 
         if     ping <= 30                 then realmax_msg_size = max_msg_size
-        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 7000
+        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 6000
         elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 16000
         elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 30000
         else                                   realmax_msg_size = 24000 end
@@ -267,13 +267,13 @@ if CLIENT then
     end)
 
     --- Testing only
-    if LocalPlayer() then
-        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-        send_request("models/alyx.mdl")
-        send_request("models/alyx.vvd")
-        send_request("models/dog.mdl")
-        send_request("models/kleiner.mdl")
-    end
+    -- if LocalPlayer() then
+    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+    --     send_request("models/alyx.mdl")
+    --     send_request("models/alyx.vvd")
+    --     send_request("models/dog.mdl")
+    --     send_request("models/kleiner.mdl")
+    -- end
 
     mdlstream.SendRequest = send_request
 else
