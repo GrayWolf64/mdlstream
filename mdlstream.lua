@@ -79,9 +79,13 @@ if CLIENT then
     local function validate_header(_path)
         local ext = string.GetExtensionFromFilename(_path)
 
-        if ext == "vvd" or ext == "phy" then return true end
-
         local _file = file.Open(_path, "rb", "GAME")
+
+        if ext == "vvd" or ext == "phy" then
+            if _file:Read(2) == "MZ" then return false end
+
+            return true
+        end
 
         local function read_cint()
             return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)}
@@ -235,12 +239,13 @@ if CLIENT then
     end)
 
     --- Testing only
-    if LocalPlayer() then
-        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-        send_request("models/alyx.mdl")
-        send_request("models/dog.mdl")
-        send_request("models/kleiner.mdl")
-    end
+    -- if LocalPlayer() then
+    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+    --     send_request("models/alyx.mdl")
+    --     send_request("models/alyx.vvd")
+    --     send_request("models/dog.mdl")
+    --     send_request("models/kleiner.mdl")
+    -- end
 
     mdlstream.SendRequest = send_request
 else
