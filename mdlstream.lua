@@ -32,18 +32,24 @@ local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, aroun
 -- 3 for #content frame ending position
 -- 3 for uid of every accepted request, generated on client
 
-local size_3bytes = 24
--- every uint we read and write will be a 24-bit one, max = 16777215, definitely abundant
 local tonumber            = tonumber
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
 
-local netlib_wuint        = function(_uint) net.WriteUInt(_uint, size_3bytes) end
-local netlib_ruint        = function() return net.ReadUInt(size_3bytes) end
+-- every uint we read and write will be a 24-bit one, max = 16777215, definitely abundant
+local netlib_wuint        = function(_uint) net.WriteUInt(_uint, 24) end
+local netlib_ruint        = function() return net.ReadUInt(24) end
 
-local netlib_wbool        = net.WriteBool
-local netlib_rbool        = net.ReadBool
+--- dedicated to read and write response mode, max = 255
+--
+-- 100: Server has accepted Client's request, awaits for the first frame
+-- 101: Server awaits for subsequent frame
+-- 200: Client sends a frame that can be received and built on Server using previously received frames or
+--      this request consists only one frame
+-- 201: Client sends a frame that requires Server's subsequent frame-save and `101` ACK msg
+local netlib_wuintm       = function(_uint) net.WriteUInt(_uint, 8) end
+local netlib_ruintm       = function() return net.ReadUInt(8) end
 
 local str_sub             = string.sub
 local tblib_concat        = table.concat
@@ -53,6 +59,7 @@ local file_size           = file.Size
 
 if CLIENT then
     local lzma             = util.Compress
+
     local netlib_wstring   = net.WriteString
     local netlib_toserver  = net.SendToServer
 
@@ -161,8 +168,8 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
-        assert(isstring(path),       "MDLStream: 'path' is not a string")
-        assert(isfunction(callback), "MDLStream: 'callback' is not a function")
+        assert(isstring(path),                          "MDLStream: 'path' is not a string")
+        assert(isfunction(callback) or callback == nil, "MDLStream: 'callback' is not nil or function")
 
         assert(file_formats[str_ext_fromfile(path)],     "MDLStream: Tries to send unsupported file, "               .. path)
         assert(file_size(path, "GAME") <= max_file_size, "MDLStream: Tries to send file larger than 8 MB, "          .. path)
@@ -209,9 +216,13 @@ if CLIENT then
         else                                   realmax_msg_size = 24000 end
     end
 
+    local function wmode_frame(_exceeds)
+        if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end
+    end
+
     netlib_set_receiver("mdlstream_ack", function()
-        local blink_mode = netlib_rbool()
-        local _uid       = netlib_ruint()
+        local _mode = netlib_ruintm()
+        local _uid  = netlib_ruint()
 
         netlib_start("mdlstream_frame")
 
@@ -220,13 +231,13 @@ if CLIENT then
         adjust_max_msg_size()
 
         --- May better simplify section below
-        if blink_mode == false then
+        if _mode == 100 then
             content_temp[_uid][1] = lzma(serialize_table(bytes_table(content_temp[_uid][2])))
 
             local _content = content_temp[_uid][1]
 
             local exceeds_max = #_content > realmax_msg_size
-            netlib_wbool(exceeds_max)
+            wmode_frame(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(_content)
@@ -235,13 +246,12 @@ if CLIENT then
 
                 netlib_wuint(realmax_msg_size)
             end
-        elseif blink_mode == true then
+        elseif _mode == 101 then
             local _content = content_temp[_uid][1]
             local pos      = netlib_ruint()
 
             local exceeds_max = #_content - pos > realmax_msg_size
-
-            netlib_wbool(exceeds_max)
+            wmode_frame(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
@@ -335,7 +345,7 @@ else
         local function action()
             netlib_start("mdlstream_ack")
 
-            netlib_wbool(false)
+            netlib_wuintm(100)
 
             temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
@@ -367,11 +377,11 @@ else
         if not isvalid(user) then return end
 
         local _uid       = netlib_ruint()
-        local frame_type = netlib_rbool()
+        local frame_type = netlib_ruintm()
 
         local content = netlib_rdata(netlib_ruint())
 
-        if frame_type == false then
+        if frame_type == 200 then
             local bytes
 
             if #temp[_uid][1] == 0 then
@@ -415,12 +425,12 @@ else
             netlib_start("mdlstream_fin")
             netlib_wuint(_uid)
             netlib_send(user)
-        elseif frame_type == true then
+        elseif frame_type == 201 then
             temp[_uid][1][#temp[_uid][1] + 1] = content
 
             netlib_start("mdlstream_ack")
 
-            netlib_wbool(true)
+            netlib_wuintm(101)
 
             netlib_wuint(_uid)
             netlib_wuint(netlib_ruint())
