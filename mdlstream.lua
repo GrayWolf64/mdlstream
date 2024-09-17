@@ -45,6 +45,7 @@ local netlib_rbool        = net.ReadBool
 
 local str_sub             = string.sub
 local tblib_concat        = table.concat
+local tblib_remove        = table.remove
 
 local file_size           = file.Size
 
@@ -263,17 +264,16 @@ if CLIENT then
 
         content_temp[_uid][3] = nil
 
-        table.remove(queue, 1)
+        tblib_remove(queue, 1)
     end)
 
     --- Testing only
-    -- if LocalPlayer() then
-    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-    --     send_request("models/alyx.mdl")
-    --     send_request("models/alyx.vvd")
-    --     send_request("models/dog.mdl")
-    --     send_request("models/kleiner.mdl")
-    -- end
+    if LocalPlayer() then
+        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+        send_request("models/alyx.mdl")
+        send_request("models/alyx.vvd")
+        send_request("models/kleiner.mdl")
+    end
 
     mdlstream.SendRequest = send_request
 else
@@ -285,6 +285,8 @@ else
     local netlib_rdata   = net.ReadData
 
     local systime        = SysTime
+
+    local isvalid        = IsValid
 
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
@@ -318,6 +320,8 @@ else
     local queue = queue or {}
 
     netlib_set_receiver("mdlstream_request", function(_, user)
+        if not isvalid(user) then return end
+
         local _path = netlib_rstring()
         local _uid  = netlib_ruint()
 
@@ -335,17 +339,28 @@ else
             netlib_send(user)
         end
 
-        queue[#queue + 1] = {[1] = action, [2] = false}
+        queue[#queue + 1] = {[1] = action, [2] = false, [3] = user}
         --end
     end)
 
-    timer.Create("mdlstream_watcher", 0.875, 0, function()
-        if not queue[1] or queue[1][2] then return end
-        queue[1][1]()
-        queue[1][2] = true
-    end)
+    do
+        local qhead
+
+        timer.Create("mdlstream_watcher", 0.875, 0, function()
+            qhead = queue[1]
+
+            --- gone player has occupied the first slot in queue, abandon it
+            if qhead and not isvalid(qhead[3]) then tblib_remove(queue, 1) end
+
+            if not qhead or qhead[2] then return end
+            qhead[1]()
+            queue[1][2] = true
+        end)
+    end
 
     netlib_set_receiver("mdlstream_frame", function(_, user)
+        if not isvalid(user) then return end
+
         local _uid       = netlib_ruint()
         local frame_type = netlib_rbool()
 
@@ -385,12 +400,15 @@ else
             temp[_uid][2] = nil
             temp[_uid][3] = nil
 
-            table.remove(queue, 1)
+            --- get defensive here, just in case user disappeared before this
+            -- if invalid, don't send FIN and leave the dead queue item for the timer to clean
+            -- VALIDATE ME!
+            if not isvalid(user) then return end
+
+            tblib_remove(queue, 1)
 
             netlib_start("mdlstream_fin")
-
             netlib_wuint(_uid)
-
             netlib_send(user)
         elseif frame_type == true then
             temp[_uid][1][#temp[_uid][1] + 1] = content
