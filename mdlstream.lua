@@ -19,6 +19,8 @@
 -- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
 -- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel
 -- for some crucial hints on mdl header1
+if not gmod or game.SinglePlayer() then return end
+
 mdlstream = {}
 
 --- Shared konstants(not necessarily)
@@ -159,6 +161,9 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
+        assert(isstring(path),       "MDLStream: 'path' is not a string")
+        assert(isfunction(callback), "MDLStream: 'callback' is not a function")
+
         assert(file_formats[str_ext_fromfile(path)],     "MDLStream: Tries to send unsupported file, "               .. path)
         assert(file_size(path, "GAME") <= max_file_size, "MDLStream: Tries to send file larger than 8 MB, "          .. path)
         assert(validate_header(path),                    "MDLStream: Corrupted or intentionally bad file (header), " .. path)
@@ -267,15 +272,15 @@ if CLIENT then
         tblib_remove(queue, 1)
     end)
 
-    --- Testing only
-    if LocalPlayer() then
-        send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-        send_request("models/alyx.mdl")
-        send_request("models/alyx.vvd")
-        send_request("models/kleiner.mdl")
-    end
-
     mdlstream.SendRequest = send_request
+
+    --- Testing only
+    -- if LocalPlayer() then
+    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+    --     send_request("models/alyx.mdl")
+    --     send_request("models/alyx.vvd")
+    --     send_request("models/kleiner.mdl")
+    -- end
 else
     local delzma         = util.Decompress
     local str_find       = string.find
