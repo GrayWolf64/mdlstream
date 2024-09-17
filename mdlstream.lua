@@ -64,13 +64,16 @@ if CLIENT then
     end
 
     local determinant = {
-        id = {73, 68, 83, 84}, -- "IDST"
+        id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
         versions = {
-            [4]    = true, [6]  = true, [10] = true, [14] = true,
-            [2531] = true, [31] = true, [32] = true, [36] = true,
-            [37]   = true, [44] = true, [48] = true, [49] = true,
-            [52]   = true, [53] = true, [45] = true
-        } -- 45?
+            --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related, too old that is out of scope of this project
+            -- [4] = true, [6]  = true, [10] = true,
+            [14]   = true,
+            [2531] = true, [27] = true, [28] = true, [29] = true,
+            [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
+            [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
+            [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
+        }
     }
 
     local function validate_header(_path)
