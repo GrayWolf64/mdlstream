@@ -11,8 +11,7 @@ After server tells client that sync(transmission and file build) successful, cli
 
 Detailed workings please turn to the source file, easy to read.
 
-If you are a client, your first request must be fulfilled in order that your subsequent request be handled, and your subsequent request must
-be fulfilled so that your more subsequent request be handled.
+If you are a client, your requests are all enqueued clientside, each request action can run only if the previous one is already ran.
 
 # Attention
 
