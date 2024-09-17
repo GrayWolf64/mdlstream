@@ -13,6 +13,8 @@ Detailed workings please turn to the source file, easy to read.
 
 If you are a client, your requests are all enqueued clientside, each request action can run only if the previous one is already ran(finished).
 
+In singleplayer, api is not enabled.
+
 # Attention
 
 1. `mdlstream` currently doesn't check if the specified file already exists on server
