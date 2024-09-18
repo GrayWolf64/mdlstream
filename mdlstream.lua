@@ -57,6 +57,8 @@ local tblib_remove        = table.remove
 
 local file_size           = file.Size
 
+local mstr                = function(_s) return "MDLStream: " .. _s end
+
 if CLIENT then
     local lzma             = util.Compress
 
@@ -166,14 +168,14 @@ if CLIENT then
     end
 
     local function send_request(path, callback)
-        assert(isstring(path),                          "MDLStream: 'path' is not a string")
-        assert(isfunction(callback) or callback == nil, "MDLStream: 'callback' is not nil or function")
+        assert(isstring(path),                          mstr"'path' is not a string")
+        assert(isfunction(callback) or callback == nil, mstr"'callback' is not nil or function")
 
-        assert(file.Exists(path, "GAME"),               "MDLStream: desired 'filepath' does not exist on client, "   .. path)
+        assert(file.Exists(path, "GAME"),               mstr"desired 'filepath' does not exist on client, "   .. path)
 
-        assert(file_formats[str_ext_fromfile(path)],     "MDLStream: Tries to send unsupported file, "               .. path)
-        assert(file_size(path, "GAME") <= max_file_size, "MDLStream: Tries to send file larger than 8 MB, "          .. path)
-        assert(validate_header(path),                    "MDLStream: Corrupted or intentionally bad file (header), " .. path)
+        assert(file_formats[str_ext_fromfile(path)],     mstr"Tries to send unsupported file, "               .. path)
+        assert(file_size(path, "GAME") <= max_file_size, mstr"Tries to send file larger than 8 MB, "          .. path)
+        assert(validate_header(path),                    mstr"Corrupted or intentionally bad file (header), " .. path)
 
         if not callback or not isfunction(callback) then
             callback = fun_donothing
@@ -393,7 +395,7 @@ else
 
             local tlapse = systime() - temp[_uid][3]
 
-            print("MDLStream: took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
+            print(mstr"took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
                     .. " recv & build, '" .. path .. "'", "from " .. user:SteamID64() .. ";"
                     .. " avg spd, " .. string.NiceSize(file_size(path, "DATA") / tlapse) .. "/s")
 
