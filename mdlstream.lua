@@ -145,8 +145,6 @@ if CLIENT then
 
     local content_temp = content_temp or {}
 
-    local queue = queue or {}
-
     local function bytes_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
 
@@ -171,6 +169,8 @@ if CLIENT then
         assert(isstring(path),                          "MDLStream: 'path' is not a string")
         assert(isfunction(callback) or callback == nil, "MDLStream: 'callback' is not nil or function")
 
+        assert(file.Exists(path, "GAME"),               "MDLStream: desired 'filepath' does not exist on client, "   .. path)
+
         assert(file_formats[str_ext_fromfile(path)],     "MDLStream: Tries to send unsupported file, "               .. path)
         assert(file_size(path, "GAME") <= max_file_size, "MDLStream: Tries to send file larger than 8 MB, "          .. path)
         assert(validate_header(path),                    "MDLStream: Corrupted or intentionally bad file (header), " .. path)
@@ -179,26 +179,15 @@ if CLIENT then
             callback = fun_donothing
         end
 
-        local function action()
-            uid = uid + 1
+        uid = uid + 1
 
-            content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
+        content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
 
-            netlib_start("mdlstream_request")
-            netlib_wstring(path)
-            netlib_wuint(uid)
-            netlib_toserver()
-        end
-
-        --- [2]: is this action called once
-        queue[#queue + 1] = {[1] = action, [2] = false}
+        netlib_start("mdlstream_request")
+        netlib_wstring(path)
+        netlib_wuint(uid)
+        netlib_toserver()
     end
-
-    timer.Create("mdlstream_watcher", 1, 0, function()
-        if not queue[1] or queue[1][2] then return end
-        queue[1][1]()
-        queue[1][2] = true
-    end)
 
     --- Based on assumptions
     -- In the worst case, a 8 MB file takes about 3334 messages to transmit,
@@ -278,8 +267,6 @@ if CLIENT then
         pcall(content_temp[_uid][3])
 
         content_temp[_uid][3] = nil
-
-        tblib_remove(queue, 1)
     end)
 
     mdlstream.SendRequest = send_request
@@ -287,9 +274,9 @@ if CLIENT then
     --- Testing only
     -- if LocalPlayer() then
     --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-    --     send_request("models/alyx.mdl")
-    --     send_request("models/alyx.vvd")
-    --     send_request("models/kleiner.mdl")
+    --     send_request("models/alyx.mdl"); send_request("models/alyx.vvd")
+    --     send_request("models/kleiner.mdl"); send_request("models/kleiner.phy")
+    --     send_request("models/dog.mdl")
     -- end
 else
     local delzma         = util.Decompress
