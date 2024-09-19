@@ -183,7 +183,7 @@ if CLIENT then
 
         uid = uid + 1
 
-        content_temp[uid] = {[1] = "", [2] = path, [3] = callback}
+        content_temp[uid] = {[1] = lzma(serialize_table(bytes_table(path))), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_request")
         netlib_wstring(path)
@@ -223,8 +223,6 @@ if CLIENT then
 
         --- May better simplify section below
         if _mode == 100 then
-            content_temp[_uid][1] = lzma(serialize_table(bytes_table(content_temp[_uid][2])))
-
             local _content = content_temp[_uid][1]
 
             local exceeds_max = #_content > realmax_msg_size
