@@ -420,12 +420,10 @@ else
     end)
 end
 
--- if CLIENT then
-    --- Testing only
-    -- if LocalPlayer() then
-    --     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
-    --     send_request("models/alyx.mdl"); send_request("models/alyx.vvd")
-    --     send_request("models/kleiner.mdl"); send_request("models/kleiner.phy")
-    --     send_request("models/dog.mdl")
-    -- end
+--- Testing only
+-- if CLIENT and LocalPlayer() then
+--     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
+--     send_request("models/alyx.mdl"); send_request("models/alyx.vvd")
+--     send_request("models/kleiner.mdl"); send_request("models/kleiner.phy")
+--     send_request("models/dog.mdl")
 -- end
