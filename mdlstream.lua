@@ -402,18 +402,19 @@ else
             temp[_uid][2] = nil
             temp[_uid][3] = nil
 
+            tblib_remove(queue, 1)
+
             --- get defensive here, just in case user disappeared before this
-            -- if invalid, don't send FIN and leave the dead queue item for the timer to clean
+            -- if invalid, don't send FIN
             -- VALIDATE ME!
             if not isvalid(user) then return end
 
-            tblib_remove(queue, 1)
-
             netlib_start("mdlstream_fin")
             netlib_wuint(_uid)
-            netlib_send(user)
         elseif frame_type == 201 then
             temp[_uid][1][#temp[_uid][1] + 1] = content
+
+            if not isvalid(user) then return end
 
             netlib_start("mdlstream_ack")
 
@@ -421,8 +422,8 @@ else
 
             netlib_wuint(_uid)
             netlib_wuint(netlib_ruint())
-
-            netlib_send(user)
         end
+
+        netlib_send(user)
     end)
 end
