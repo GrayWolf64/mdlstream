@@ -24,13 +24,14 @@ if not gmod or game.SinglePlayer() then return end
 mdlstream = {}
 
 --- Shared konstants(not necessarily)
-local max_msg_size         = 64000 - 3 - 1 - 3 - 3 - 3 -- bytes, 0.063 MB, around 100 msgs to transmit a 8 MB file
+local max_msg_size         = 65536 - 3 - 1 - 3 - 3 - 3 - 10000 -- bytes, 0.054 MB, around 150 msgs to transmit a 8 MB file
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
 -- 3 for #content(slice / frame) length
 -- 3 for #content frame ending position
 -- 3 for uid of every accepted request, generated on client
+-- 10000 spared for testing the most optimal size
 
 local tonumber            = tonumber
 
@@ -203,7 +204,7 @@ if CLIENT then
         if     ping <= 30                 then realmax_msg_size = max_msg_size
         elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 6000
         elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 16000
-        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 30000
+        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 28000
         else                                   realmax_msg_size = 24000 end
     end
 
@@ -221,10 +222,10 @@ if CLIENT then
 
         adjust_max_msg_size()
 
+        local _content = content_temp[_uid][1]
+
         --- May better simplify section below
         if _mode == 100 then
-            local _content = content_temp[_uid][1]
-
             local exceeds_max = #_content > realmax_msg_size
             wmode_frame(exceeds_max)
 
@@ -236,7 +237,6 @@ if CLIENT then
                 netlib_wuint(realmax_msg_size)
             end
         elseif _mode == 101 then
-            local _content = content_temp[_uid][1]
             local pos      = netlib_ruint()
 
             local exceeds_max = #_content - pos > realmax_msg_size
@@ -415,8 +415,8 @@ end
 
 --- Testing only
 -- if CLIENT and LocalPlayer() then
---     send_request("models/alyx.phy", function() print("alyx phy download success callback") end)
---     send_request("models/alyx.mdl"); send_request("models/alyx.vvd")
---     send_request("models/kleiner.mdl"); send_request("models/kleiner.phy")
---     send_request("models/dog.mdl")
+--     mdlstream.SendRequest("models/alyx.phy", function() print("alyx phy download success callback") end)
+--     mdlstream.SendRequest("models/alyx.mdl");    mdlstream.SendRequest("models/alyx.vvd")
+--     mdlstream.SendRequest("models/kleiner.mdl"); mdlstream.SendRequest("models/kleiner.phy")
+--     mdlstream.SendRequest("models/dog.mdl")
 -- end
