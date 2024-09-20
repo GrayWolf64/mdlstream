@@ -396,17 +396,10 @@ else
 
             tblib_remove(queue, 1)
 
-            --- get defensive here, just in case user disappeared before this
-            -- if invalid, don't send FIN
-            -- VALIDATE ME!
-            if not isvalid(user) then return end
-
             netlib_start("mdlstream_fin")
             netlib_wuint(_uid)
         elseif frame_type == 201 then
             temp[_uid][1][#temp[_uid][1] + 1] = content
-
-            if not isvalid(user) then return end
 
             netlib_start("mdlstream_ack")
 
