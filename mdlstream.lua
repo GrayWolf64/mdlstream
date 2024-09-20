@@ -48,7 +48,7 @@ local netlib_ruint        = function() return net.ReadUInt(24) end
 -- 101: Server awaits for subsequent frame
 -- 200: Client sends a frame that can be received and built on Server using previously received frames or
 --      this request consists only one frame
--- 201: Client sends a frame that requires Server's subsequent frame-save and `101` ACK msg
+-- 201: Client sends a frame that requires Server's subsequent frame-save and acknowledgement
 local netlib_wuintm       = function(_uint) net.WriteUInt(_uint, 8) end
 local netlib_ruintm       = function() return net.ReadUInt(8) end
 
@@ -76,7 +76,7 @@ if CLIENT then
     local realmax_msg_size = max_msg_size
 
     local max_file_size = 8000000 -- bytes, 8 MB
-    local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true}
+    local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true, ["vtx"] = true}
 
     local function netlib_wbdata(_data)
         local _len = #_data
@@ -141,13 +141,6 @@ if CLIENT then
         return true
     end
 
-    local uid = uid or 1 -- included in msg
-    -- To ensure that we don't lose the identity of one file's content when this client request to send another
-    -- which leads to overriding of file content
-    -- With the specified player and uid, we can tell every file
-
-    local content_temp = content_temp or {}
-
     local function bytes_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
 
@@ -164,9 +157,12 @@ if CLIENT then
         return bytes
     end
 
-    local function serialize_table(_t)
-        return tblib_concat(_t, ",")
-    end
+    local uid = uid or 1 -- included in msg
+    -- To ensure that we don't lose the identity of one file's content when this client request to send another
+    -- which leads to overriding of file content
+    -- With the specified player and uid, we can tell every file
+
+    local content_temp = content_temp or {}
 
     local function send_request(path, callback)
         assert(isstring(path),                          mstr"'path' is not a string")
@@ -184,16 +180,16 @@ if CLIENT then
 
         uid = uid + 1
 
-        content_temp[uid] = {[1] = lzma(serialize_table(bytes_table(path))), [2] = path, [3] = callback}
+        content_temp[uid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
 
-        netlib_start("mdlstream_request")
+        netlib_start("mdlstream_req")
         netlib_wstring(path)
         netlib_wuint(uid)
         netlib_toserver()
     end
 
     --- Based on assumptions
-    -- In the worst case, a 8 MB file takes about 3334 messages to transmit,
+    -- In the worst case, a 8 MB file takes about 3 thousand messages to transmit,
     -- we'd better hope that this client's net condition will get better,
     -- otherwise, he will probably wait forever or quit and get some better gear
     local function adjust_max_msg_size()
@@ -246,9 +242,8 @@ if CLIENT then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
             else
                 local _endpos = pos + realmax_msg_size
-                local _frame = str_sub(_content, pos + 1, _endpos)
 
-                netlib_wbdata(_frame)
+                netlib_wbdata(str_sub(_content, pos + 1, _endpos))
 
                 netlib_wuint(_endpos)
             end
@@ -284,7 +279,7 @@ else
 
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
-    util.AddNetworkString"mdlstream_request"
+    util.AddNetworkString"mdlstream_req"
     util.AddNetworkString"mdlstream_frame" -- or Slice
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
     util.AddNetworkString"mdlstream_fin" -- Final
@@ -313,7 +308,7 @@ else
 
     local queue = queue or {}
 
-    netlib_set_receiver("mdlstream_request", function(_, user)
+    netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
         local _path = netlib_rstring()
