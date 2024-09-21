@@ -75,8 +75,11 @@ if CLIENT then
 
     local realmax_msg_size = max_msg_size
 
-    local max_file_size = 8000000 -- bytes, 8 MB
-    local file_formats  = {["mdl"] = true, ["vvd"] = true, ["phy"] = true, ["vtx"] = true}
+    -- bytes, 8 MB
+    local max_file_size = 8000000
+
+    -- VALIDATE ME: does server really need some of them?
+    local file_formats  = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
 
     local function netlib_wbdata(_data)
         local _len = #_data
