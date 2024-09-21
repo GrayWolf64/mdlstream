@@ -24,13 +24,14 @@ if not gmod or game.SinglePlayer() then return end
 mdlstream = {}
 
 --- Shared konstants(not necessarily)
-local max_msg_size         = 65536 - 3 - 1 - 3 - 3 - 3 - 10000 -- bytes, 0.054 MB, around 150 msgs to transmit a 8 MB file
+local max_msg_size         = 65536 - 3 - 1 - 3 - 3 - 3 - 3 - 10000 -- bytes, 0.054 MB, around 150 msgs to transmit a 8 MB file
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
 -- 3 for #content(slice / frame) length
 -- 3 for #content frame ending position
--- 3 for uid of every accepted request, generated on client
+-- 3 for cuid of every accepted request(of a specific player), generated on client
+-- 3 for suid of every accepted request, generated on server, may be around the sum of all `cuid`s of every client
 -- 10000 spared for testing the most optimal size
 
 local tonumber            = tonumber
@@ -159,10 +160,10 @@ if CLIENT then
         return bytes
     end
 
-    local uid = uid or 1 -- included in msg
+    local cuid = cuid or 1 -- included in msg
     -- To ensure that we don't lose the identity of one file's content when this client request to send another
     -- which leads to overriding of file content
-    -- With the specified player and uid, we can tell every file
+    -- With the specified player and cuid, we can tell every file
 
     local content_temp = content_temp or {}
 
@@ -179,13 +180,13 @@ if CLIENT then
             callback = fun_donothing
         end
 
-        uid = uid + 1
+        cuid = cuid + 1
 
-        content_temp[uid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
+        content_temp[cuid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
-        netlib_wuint(uid)
+        netlib_wuint(cuid)
         netlib_toserver()
     end
 
@@ -211,17 +212,17 @@ if CLIENT then
 
     netlib_set_receiver("mdlstream_ack", function()
         local _mode = netlib_ruintm()
-        local _uid  = netlib_ruint()
+        local _cuid  = netlib_ruint()
 
         netlib_start("mdlstream_frame")
 
-        netlib_wuint(_uid)
+        netlib_wuint(_cuid)
 
         adjust_max_msg_size()
 
-        local _content = content_temp[_uid][1]
+        local _content = content_temp[_cuid][1]
 
-        local filename = string.GetFileFromFilename(content_temp[_uid][2])
+        local filename = string.GetFileFromFilename(content_temp[_cuid][2])
 
         --- May better simplify section below
         if _mode == 100 then
@@ -256,19 +257,21 @@ if CLIENT then
             end
         end
 
+        netlib_wuint(netlib_ruint()) -- suid
+
         netlib_toserver()
     end)
 
     netlib_set_receiver("mdlstream_fin", function()
-        local _uid = netlib_ruint()
+        local _cuid = netlib_ruint()
         --- Clears garbage on client's delicate computer
         -- can we keep the path in cache to speed check-file process?
-        content_temp[_uid][1] = nil
-        content_temp[_uid][2] = nil
+        content_temp[_cuid][1] = nil
+        content_temp[_cuid][2] = nil
 
-        pcall(content_temp[_uid][3])
+        pcall(content_temp[_cuid][3])
 
-        content_temp[_uid][3] = nil
+        content_temp[_cuid][3] = nil
     end)
 
     mdlstream.SendRequest = send_request
@@ -315,11 +318,13 @@ else
 
     local queue = queue or {}
 
+    local suid = suid or 1 -- included in msg
+
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
         local _path = netlib_rstring()
-        local _uid  = netlib_ruint()
+        local _cuid = netlib_ruint()
 
         --- Whether checks file existence?
         --if not file.Exists(_path, "GAME") and not file.Exists(_path, "DATA") then
@@ -328,9 +333,12 @@ else
 
             netlib_wuintm(100)
 
-            temp[_uid] = {[1] = {}, [2] = _path, [3] = systime()}
+            suid = suid + 1
 
-            netlib_wuint(_uid)
+            temp[suid] = {[1] = {}, [2] = _path, [3] = systime()}
+
+            netlib_wuint(_cuid)
+            netlib_wuint(suid)
 
             netlib_send(user)
         end
@@ -357,23 +365,25 @@ else
     netlib_set_receiver("mdlstream_frame", function(_, user)
         if not isvalid(user) then return end
 
-        local _uid       = netlib_ruint()
+        local _cuid       = netlib_ruint()
         local frame_type = netlib_ruintm()
 
         local content = netlib_rdata(netlib_ruint())
 
         if frame_type == 200 then
+            local _suid = netlib_ruint()
+
             local bytes
 
-            if #temp[_uid][1] == 0 then
+            if #temp[_suid][1] == 0 then
                 bytes = deserialize_table(delzma(content))
             else
-                temp[_uid][1][#temp[_uid][1] + 1] = content
+                temp[_suid][1][#temp[_suid][1] + 1] = content
 
-                bytes = deserialize_table(delzma(tblib_concat(temp[_uid][1])))
+                bytes = deserialize_table(delzma(tblib_concat(temp[_suid][1])))
             end
 
-            local path = temp[_uid][2]
+            local path = temp[_suid][2]
 
             file.CreateDir(string.GetPathFromFilename(path))
 
@@ -385,30 +395,31 @@ else
 
             _file:Close()
 
-            local tlapse = systime() - temp[_uid][3]
+            local tlapse = systime() - temp[_suid][3]
 
             print(mstr"took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
                     .. " recv & build, '" .. path .. "'", "from " .. user:SteamID64() .. ";"
                     .. " avg spd, " .. string.NiceSize(file_size(path, "DATA") / tlapse) .. "/s")
 
             --- Clears garbage
-            temp[_uid][1] = nil
-            temp[_uid][2] = nil
-            temp[_uid][3] = nil
+            temp[_suid][1] = nil
+            temp[_suid][2] = nil
+            temp[_suid][3] = nil
 
             tblib_remove(queue, 1)
 
             netlib_start("mdlstream_fin")
-            netlib_wuint(_uid)
+            netlib_wuint(_cuid)
         elseif frame_type == 201 then
-            temp[_uid][1][#temp[_uid][1] + 1] = content
+            temp[_cuid][1][#temp[_cuid][1] + 1] = content
 
             netlib_start("mdlstream_ack")
 
             netlib_wuintm(101)
 
-            netlib_wuint(_uid)
-            netlib_wuint(netlib_ruint())
+            netlib_wuint(_cuid)
+            netlib_wuint(netlib_ruint()) -- pos
+            netlib_wuint(netlib_ruint()) -- suid
         end
 
         netlib_send(user)
@@ -416,9 +427,9 @@ else
 end
 
 --- Testing only
--- if CLIENT and LocalPlayer() then
---     mdlstream.SendRequest("models/alyx.phy", function() print("alyx phy download success callback") end)
---     mdlstream.SendRequest("models/alyx.mdl");    mdlstream.SendRequest("models/alyx.vvd")
---     mdlstream.SendRequest("models/kleiner.mdl"); mdlstream.SendRequest("models/kleiner.phy")
---     mdlstream.SendRequest("models/dog.mdl")
--- end
+if CLIENT and LocalPlayer() then
+    mdlstream.SendRequest("models/alyx.phy", function() print("alyx phy download success callback") end)
+    mdlstream.SendRequest("models/alyx.mdl");    mdlstream.SendRequest("models/alyx.vvd")
+    mdlstream.SendRequest("models/kleiner.mdl"); mdlstream.SendRequest("models/kleiner.phy")
+    mdlstream.SendRequest("models/dog.mdl")
+end
