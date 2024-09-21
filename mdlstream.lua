@@ -17,7 +17,7 @@
 -- kleiner.mdl len   : 248252,                     about 240kb
 --
 -- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
--- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel
+-- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel
 -- for some crucial hints on mdl header1
 if not gmod or game.SinglePlayer() then return end
 
@@ -44,8 +44,8 @@ local netlib_ruint        = function() return net.ReadUInt(24) end
 
 --- dedicated to read and write response mode, max = 255
 --
--- 100: Server has accepted Client's request, awaits for the first frame
--- 101: Server awaits for subsequent frame
+-- 100: Server has accepted Client's request, awaits the first frame
+-- 101: Server awaits subsequent frame
 -- 200: Client sends a frame that can be received and built on Server using previously received frames or
 --      this request consists only one frame
 -- 201: Client sends a frame that requires Server's subsequent frame-save and acknowledgement
@@ -84,12 +84,13 @@ if CLIENT then
         net.WriteData(_data, _len)
     end
 
-    local determinant = {
+    local mdl_determinant = {
         id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
         versions = {
-            --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related, too old that is out of scope of this project
-            -- [4] = true, [6]  = true, [10] = true,
-            [14]   = true,
+            --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
+            -- 14 is used in "Half-Life SDK", too old that is out of scope of this project
+            -- [4] = true, [6]  = true,
+            -- [10] = true, [14]   = true,
             [2531] = true, [27] = true, [28] = true, [29] = true,
             [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
             [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
@@ -97,18 +98,16 @@ if CLIENT then
         }
     }
 
+    --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
     local function validate_header(_path)
-        local ext = str_ext_fromfile(_path)
-
         local _file = file.Open(_path, "rb", "GAME")
         if not _file then return false end
 
-        --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
-        if ext == "vvd" or ext == "phy" then
-            if _file:Read(2) == "MZ" then return false end
+        if _file:Read(2) == "MZ" then return false end
+        _file:Skip(-2)
 
-            return true
-        end
+        --- Currently, only mdl's header check is implemented
+        if str_ext_fromfile(_path) ~= "mdl" then return true end
 
         local function read_cint()
             return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)}
@@ -128,15 +127,15 @@ if CLIENT then
 
         _file:Close()
 
-        if studiohdr_t.id[1] ~= determinant.id[1] or studiohdr_t.id[2] ~= determinant.id[2] or
-            studiohdr_t.id[3] ~= determinant.id[3] or studiohdr_t.id[4] ~= determinant.id[4] then
+        if  studiohdr_t.id[1] ~= mdl_determinant.id[1] or studiohdr_t.id[2] ~= mdl_determinant.id[2] or
+            studiohdr_t.id[3] ~= mdl_determinant.id[3] or studiohdr_t.id[4] ~= mdl_determinant.id[4] then
             return false
         end
 
-        if not determinant.versions[hext_to_int(studiohdr_t.version)]   then return false end
-        if not studiohdr_t.checksum or not #studiohdr_t.checksum == 4   then return false end
-        if not studiohdr_t.name                                         then return false end
-        if hext_to_int(studiohdr_t.datalen) ~= file_size(_path, "GAME") then return false end
+        if not mdl_determinant.versions[hext_to_int(studiohdr_t.version)] then return false end
+        if not studiohdr_t.checksum or not #studiohdr_t.checksum == 4     then return false end
+        if not studiohdr_t.name                                           then return false end
+        if hext_to_int(studiohdr_t.datalen) ~= file_size(_path, "GAME")   then return false end
 
         return true
     end
@@ -166,7 +165,6 @@ if CLIENT then
 
     local function send_request(path, callback)
         assert(isstring(path),                          mstr"'path' is not a string")
-        assert(isfunction(callback) or callback == nil, mstr"'callback' is not nil or function")
 
         assert(file.Exists(path, "GAME"),               mstr"desired 'filepath' does not exist on client, "   .. path)
 
