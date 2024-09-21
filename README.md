@@ -17,8 +17,4 @@ In singleplayer, api is not enabled.
 
 # Attention
 
-1. `mdlstream` currently doesn't check if the specified file already exists on server
-2. You may not use this lib(`mdlstream.lua`) if you *include this file and remove its boilerplate*; You may not use snippets from this lib
-if you don't include their original authors
-3. You may ask for permission if you would like to use this lib in non-free projects(addons)
-4. No warranty
+`mdlstream` currently doesn't check if the specified file already exists on server.
