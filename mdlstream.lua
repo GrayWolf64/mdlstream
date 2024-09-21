@@ -221,6 +221,8 @@ if CLIENT then
 
         local _content = content_temp[_uid][1]
 
+        local filename = string.GetFileFromFilename(content_temp[_uid][2])
+
         --- May better simplify section below
         if _mode == 100 then
             local exceeds_max = #_content > realmax_msg_size
@@ -228,6 +230,8 @@ if CLIENT then
 
             if not exceeds_max then
                 netlib_wbdata(_content)
+
+                print(mstr"CL single-frame sent " .. filename)
             else
                 netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
 
@@ -235,6 +239,8 @@ if CLIENT then
             end
         elseif _mode == 101 then
             local pos      = netlib_ruint()
+
+            print(mstr"CL " .. filename, tostring(math.floor((pos / #_content) * 100)) .. "%")
 
             local exceeds_max = #_content - pos > realmax_msg_size
             wmode_frame(exceeds_max)
