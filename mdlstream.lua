@@ -323,14 +323,14 @@ else
         local uid   = netlib_ruint64()
         local size  = tonumber(netlib_rstring())
 
-        -- if file.Exists(_path, "GAME") and size == file.Size(_path, "GAME") then
-        --     netlib_start("mdlstream_ack")
-        --     netlib_wuintm(0)
-        --     netlib_wuint64(uid)
-        --     netlib_send(user)
+        if file.Exists(_path, "GAME") and size == file.Size(_path, "GAME") then
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(0)
+            netlib_wuint64(uid)
+            netlib_send(user)
 
-        --     return
-        -- end
+            return
+        end
 
         local function action()
             netlib_start("mdlstream_ack")
