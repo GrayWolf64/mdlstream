@@ -363,36 +363,29 @@ else
         end)
     end
 
-    --- Instead of putting mdl in data/ directly, we may need to put it in gma and ask game to load it
-    -- https://github.com/CapsAdmin/pac3/blob/48743b7bd75c274cdc25c963387b98fa65ae0015/lua/pac3/core/shared/util.lua#L729
+    --- Instead of putting a file in data/ directly, we may need to put it in gma and ask game to load it
+    -- https://github.com/CapsAdmin/pac3/blob/master/lua/pac3/core/shared/util.lua#L145
     -- https://github.com/Facepunch/gmad/blob/master/include/AddonReader.h
     local function wgma(_path, _content)
         local path_gma = string.gsub(_path, "%/", "//") .. ".gma"
         local _f = file.Open(path_gma, "wb", "DATA")
         if not string.StartsWith(_path, "models/") then _path = "models/" .. _path end
 
-        _f:Write("GMAD")
-        _f:Write("3") -- ver
+        _f:Write("GMAD") _f:WriteByte(3) -- ver
 
         _f:WriteUInt64(0) -- steamid(unused)
         _f:WriteUInt64(os.time(os.date("!*t"))) -- timestamp
 
         _f:WriteByte(0) -- required content(unused)
 
-        _f:Write("mdlstream_gma") -- addon name
-        _f:WriteByte(0)
-
-        _f:Write("") -- desc
-        _f:WriteByte(0)
-
-        _f:Write("") -- author
-        _f:WriteByte(0)
+        _f:Write("mdlstream_gma") _f:WriteByte(0) -- addon name
+        _f:Write("")              _f:WriteByte(0) -- desc
+        _f:Write("")              _f:WriteByte(0) -- author
 
         _f:WriteULong(1) -- addon ver(unused)
 
         _f:WriteULong(1) -- filenum, starts from 1
-        _f:Write(_path)
-        _f:WriteByte(0)
+        _f:Write(_path) _f:WriteByte(0)
 
         _f:WriteUInt64(file.Size(_path, "DATA"))
         _f:WriteULong(tonumber(util.CRC(_path)))
