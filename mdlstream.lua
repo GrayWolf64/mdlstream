@@ -372,31 +372,39 @@ else
         if not string.StartsWith(_path, "models/") then _path = "models/" .. _path end
 
         _f:Write("GMAD")
-        _f:WriteByte(3)
-        _f:WriteLong(0) _f:WriteLong(0)
-        _f:WriteLong(0) _f:WriteLong(0)
-        _f:WriteByte(0)
-        _f:Write("mdlstream_gma") _f:WriteByte(0)
-        _f:Write("_desc") _f:WriteByte(0)
-        _f:Write("_author") _f:WriteByte(0)
-        _f:WriteLong(1)
+        _f:Write("3") -- ver
 
-        _f:WriteLong(1)
+        _f:WriteUInt64(0) -- steamid(unused)
+        _f:WriteUInt64(os.time(os.date("!*t"))) -- timestamp
+
+        _f:WriteByte(0) -- required content(unused)
+
+        _f:Write("mdlstream_gma") -- addon name
+        _f:WriteByte(0)
+
+        _f:Write("") -- desc
+        _f:WriteByte(0)
+
+        _f:Write("") -- author
+        _f:WriteByte(0)
+
+        _f:WriteULong(1) -- addon ver(unused)
+
+        _f:WriteULong(1) -- filenum, starts from 1
         _f:Write(_path)
         _f:WriteByte(0)
 
-        _f:WriteLong(#_content)
-        _f:WriteLong(0)
-        _f:WriteLong(util.CRC(_content))
+        _f:WriteUInt64(file.Size(_path, "DATA"))
+        _f:WriteULong(tonumber(util.CRC(_path)))
 
-        _f:WriteLong(0)
+        _f:WriteULong(0)
 
         _f:Write(_content)
 
         _f:Flush()
 
         local __content = file.Read(path_gma, "DATA")
-        _f:Write(util.CRC(__content))
+        _f:WriteULong(tonumber(util.CRC(__content)))
 
         _f:Close()
     end
@@ -469,7 +477,6 @@ end
 --     mdlstream.SendRequest("models/alyx.mdl");    mdlstream.SendRequest("models/alyx.vvd")
 --     mdlstream.SendRequest("models/kleiner.mdl"); mdlstream.SendRequest("models/kleiner.phy")
 --     mdlstream.SendRequest("models/dog.mdl")
--- elseif SERVER
---     game.MountGMA("data/kleiner.phy.gma")
---     game.MountGMA("data/kleiner.mdl.gma")
+-- elseif SERVER then
+--     game.MountGMA("data/models/dog.mdl.gma")
 -- end
