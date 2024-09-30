@@ -69,6 +69,7 @@ if CLIENT then
 
     local cfile_eof        = FindMetaTable("File").EndOfFile
     local cfile_rbyte      = FindMetaTable("File").ReadByte
+    local cfile_rlong      = FindMetaTable("File").ReadLong
 
     local str_ext_fromfile = string.GetExtensionFromFilename
 
@@ -144,20 +145,20 @@ if CLIENT then
         return true
     end
 
-    local function bytes_table(_path)
+    local function long_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
 
-        local bytes = {}
+        local longs = {}
 
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
-            bytes[i] = cfile_rbyte(_file)
+            longs[i] = cfile_rlong(_file)
         end
 
         _file:Close()
 
-        return bytes
+        return longs
     end
 
     local ctemp = ctemp or {}
@@ -178,7 +179,7 @@ if CLIENT then
 
         local uid = uidgen()
 
-        ctemp[uid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
+        ctemp[uid] = {[1] = lzma(tblib_concat(long_table(path), ",")), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
@@ -216,7 +217,7 @@ if CLIENT then
             return
         end
 
-        netlib_start("mdlstream_frame")
+        netlib_start("mdlstream_frm")
 
         netlib_wuint64(uid)
 
@@ -285,10 +286,10 @@ else
 
     local isvalid        = IsValid
 
-    local cfile_wbyte    = FindMetaTable("File").WriteByte
+    local cfile_wlong    = FindMetaTable("File").WriteLong
 
     util.AddNetworkString"mdlstream_req"
-    util.AddNetworkString"mdlstream_frame" -- or Slice
+    util.AddNetworkString"mdlstream_frm" -- or Slice
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
     util.AddNetworkString"mdlstream_fin" -- Final
 
@@ -366,7 +367,7 @@ else
     --- Instead of putting a file in data/ directly, we may need to put it in gma and ask game to load it
     -- https://github.com/CapsAdmin/pac3/blob/master/lua/pac3/core/shared/util.lua#L145
     -- https://github.com/Facepunch/gmad/blob/master/include/AddonReader.h
-    local function wgma(_path, _content)
+    local function wgma(_path, _content, _uid)
         local path_gma = string.gsub(_path, "%/", "//") .. ".gma"
         local _f = file.Open(path_gma, "wb", "DATA")
         if not string.StartsWith(_path, "models/") then _path = "models/" .. _path end
@@ -378,9 +379,9 @@ else
 
         _f:WriteByte(0) -- required content(unused)
 
-        _f:Write("mdlstream_gma") _f:WriteByte(0) -- addon name
-        _f:Write("")              _f:WriteByte(0) -- desc
-        _f:Write("")              _f:WriteByte(0) -- author
+        _f:Write("mdlstream_gma" .. _uid) _f:WriteByte(0) -- addon name
+        _f:Write("")                      _f:WriteByte(0) -- desc
+        _f:Write("")                      _f:WriteByte(0) -- author
 
         _f:WriteULong(1) -- addon ver(unused)
 
@@ -402,21 +403,21 @@ else
         _f:Close()
     end
 
-    netlib_set_receiver("mdlstream_frame", function(_, user)
+    netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
         local frame_type = netlib_ruintm()
 
         local content = netlib_rdata(netlib_ruint())
 
         if frame_type == 200 then
-            local bytes
+            local longs
 
             if #temp[uid][1] == 0 then
-                bytes = deserialize_table(delzma(content))
+                longs = deserialize_table(delzma(content))
             else
                 temp[uid][1][#temp[uid][1] + 1] = content
 
-                bytes = deserialize_table(delzma(tblib_concat(temp[uid][1])))
+                longs = deserialize_table(delzma(tblib_concat(temp[uid][1])))
             end
 
             local path = temp[uid][2]
@@ -427,14 +428,13 @@ else
 
             local _file = file.Open(path, "wb", "DATA")
 
-            for i = 1, #bytes do
-                cfile_wbyte(_file, bytes[i])
+            for i = 1, #longs do
+                cfile_wlong(_file, longs[i])
             end
 
             _file:Close()
 
-            local precursor = file.Read(path, "DATA")
-            wgma(path, precursor)
+            wgma(path, file.Read(path, "DATA"), uid)
 
             local tlapse = systime() - temp[uid][3]
 
