@@ -71,7 +71,7 @@ if CLIENT then
 
     local cfile_eof        = FindMetaTable("File").EndOfFile
     local cfile_rbyte      = FindMetaTable("File").ReadByte
-    local cfile_rlong      = FindMetaTable("File").ReadLong
+    local cfile_rbyte      = FindMetaTable("File").ReadByte
 
     local str_ext_fromfile = string.GetExtensionFromFilename
 
@@ -154,20 +154,20 @@ if CLIENT then
         return true
     end
 
-    local function long_table(_path)
+    local function bytes_table(_path)
         local _file = file.Open(_path, "rb", "GAME")
 
-        local longs = {}
+        local bytes = {}
 
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
-            longs[i] = cfile_rlong(_file)
+            bytes[i] = cfile_rbyte(_file)
         end
 
         _file:Close()
 
-        return longs
+        return bytes
     end
 
     local ctemp = ctemp or {}
@@ -188,7 +188,7 @@ if CLIENT then
 
         local uid = uidgen()
 
-        ctemp[uid] = {[1] = lzma(tblib_concat(long_table(path), ",")), [2] = path, [3] = callback}
+        ctemp[uid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
@@ -360,7 +360,7 @@ else
 
     local isvalid        = IsValid
 
-    local cfile_wlong    = FindMetaTable("File").WriteLong
+    local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_req"
     util.AddNetworkString"mdlstream_frm" -- or Slice
@@ -488,14 +488,14 @@ else
         local content = netlib_rdata(netlib_ruint())
 
         if frame_type == 200 then
-            local longs
+            local bytes
 
             if #temp[uid][1] == 0 then
-                longs = deserialize_table(delzma(content))
+                bytes = deserialize_table(delzma(content))
             else
                 temp[uid][1][#temp[uid][1] + 1] = content
 
-                longs = deserialize_table(delzma(tblib_concat(temp[uid][1])))
+                bytes = deserialize_table(delzma(tblib_concat(temp[uid][1])))
             end
 
             local path = temp[uid][2]
@@ -506,8 +506,8 @@ else
 
             local _file = file.Open(path, "wb", "DATA")
 
-            for i = 1, #longs do
-                cfile_wlong(_file, longs[i])
+            for i = 1, #bytes do
+                cfile_wbyte(_file, bytes[i])
             end
 
             _file:Close()
