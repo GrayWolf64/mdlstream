@@ -92,10 +92,10 @@ if CLIENT then
     end
 
     local stdout = vgui.Create("RichText") stdout:Hide()
-    stdout:InsertColorChange(0, 0, 0, 255)
 
     local function stdout_append(_s)
-        stdout:AppendText(os.date("%H:%M:%S") .. " " .. _s .. "\n")
+        stdout:InsertColorChange(108, 166, 205, 255) stdout:AppendText(os.date("%H:%M:%S") .. " ")
+        stdout:InsertColorChange(0, 0, 0, 225) stdout:AppendText(_s .. "\n")
     end
 
     local mdl_determinant = {
@@ -323,8 +323,9 @@ if CLIENT then
 
         local cmds = {
             request   = function(_s) if LocalPlayer():IsAdmin() then send_request(string.sub(_s, 9, #_s)) else stdout_append("access violation") end end,
-            showtemp  = function(_s) stdout_append(table.ToString(ctemp, "ctemp", true)) end,
-            myrealmax = function(_s) stdout_append(realmax_msg_size) end
+            showtemp  = function(_s) for i, t in pairs(ctemp) do stdout_append(string.format("id = %i, path = %s", i, t[2])) end end,
+            myrealmax = function(_s) stdout_append(realmax_msg_size) end,
+            clearcon  = function() stdout:SetText("") end
         }
 
         cmd.GetAutoComplete = function(self, _s)
@@ -383,7 +384,7 @@ else
 
     local queue = queue or {}
 
-    local flag_testing = false
+    local flag_testing = true
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
