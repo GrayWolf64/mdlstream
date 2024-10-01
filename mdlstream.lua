@@ -80,7 +80,7 @@ if CLIENT then
     local realmax_msg_size = max_msg_size
 
     -- bytes, 8 MB
-    local max_file_size = 8000000
+    local max_file_size    = 8000000
 
     -- VALIDATE ME: does server really need some of them?
     local file_formats  = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
