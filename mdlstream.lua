@@ -89,6 +89,13 @@ if CLIENT then
         net.WriteData(_data, _len)
     end
 
+    local stdout = vgui.Create("RichText") stdout:Hide()
+    stdout:InsertColorChange(0, 0, 0, 255)
+
+    local function stdout_append(_s)
+        stdout:AppendText(os.date("%H:%M:%S") .. " " .. _s .. "\n")
+    end
+
     local mdl_determinant = {
         id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
         versions = {
@@ -235,7 +242,7 @@ if CLIENT then
             if not exceeds_max then
                 netlib_wbdata(_content)
 
-                print(mstr"CL single-frame sent " .. filename)
+                stdout_append("single-frame sent: " .. filename)
             else
                 netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
 
@@ -244,7 +251,7 @@ if CLIENT then
         elseif _mode == 101 then
             local pos      = netlib_ruint()
 
-            print(mstr"CL " .. filename, tostring(math.floor((pos / #_content) * 100)) .. "%")
+            stdout_append("progress: " .. filename .. tostring(math.floor((pos / #_content) * 100)) .. "%")
 
             local exceeds_max = #_content - pos > realmax_msg_size
             w_framemode(exceeds_max)
@@ -273,6 +280,55 @@ if CLIENT then
     end)
 
     mdlstream.SendRequest = send_request
+
+    concommand.Add("mdt", function()
+        if not LocalPlayer():IsAdmin() then print(mstr"access violation") return end
+
+        local window = vgui.Create("DFrame")
+        window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
+        window:SetTitle("MDLStream Debugging Tool") window:MakePopup()
+
+        window.lblTitle:SetFont("BudgetLabel")
+
+        window.PerformLayout = function(self)
+            local title_push = 0
+
+            if (IsValid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
+
+            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0) self.btnClose:SetSize(24, 24 )
+            self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24 )
+            self.btnMinim:SetPos(self:GetWide() - 24 * 3 - 4, 0) self.btnMinim:SetSize(24, 24 )
+            self.lblTitle:SetPos(8 + title_push, 2) self.lblTitle:SetSize(self:GetWide() - 25 - title_push, 20)
+        end
+
+        window.Paint = function(self, w, h)
+            surface.SetDrawColor(240, 240, 240) surface.DrawRect(0, 0, w, h)
+            surface.SetDrawColor(0, 0, 0) surface.DrawOutlinedRect(0, 0, w, h, 1.5)
+            surface.SetDrawColor(77, 79, 204) surface.DrawRect(1, 1, w - 1.5, 23)
+        end
+
+        local con = vgui.Create("DPanel", window)
+        con:Dock(FILL) con:DockMargin(0, 0, 0, 4)
+
+        con.Paint = function(self, w, h)
+            surface.SetDrawColor(215, 215, 215)
+            surface.DrawRect(0, 0, w, h)
+        end
+
+        stdout:SetParent(con) stdout:Dock(FILL) stdout:DockMargin(0, 0, 0, 4) stdout:Show()
+
+        local cmd = vgui.Create("DTextEntry", window)
+        cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DebugFixed")
+
+        --- TODO: argparse
+        cmd.OnEnter = function(self, _s)
+            if string.StartsWith(_s, "send_request") then
+                send_request(string.sub(_s, 14, #_s))
+            end
+
+            self:SetText("")
+        end
+    end)
 else
     local delzma         = util.Decompress
     local str_find       = string.find
@@ -295,19 +351,18 @@ else
 
     local function deserialize_table(_s)
         local ret = {}
-        local current_pos = 1
-        local start_pos, end_pos
+        local cur_pos, pos = 1, nil
 
         for i = 1, #_s do
-            start_pos, end_pos = str_find(_s, ",", current_pos, true)
+            pos = str_find(_s, ",", cur_pos, true)
 
-            if not start_pos then break end
+            if not pos then break end
 
-            ret[i] = tonumber(str_sub(_s, current_pos, start_pos - 1))
-            current_pos = end_pos + 1
+            ret[i] = tonumber(str_sub(_s, cur_pos, pos - 1))
+            cur_pos = pos + 1
         end
 
-        ret[#ret + 1] = tonumber(str_sub(_s, current_pos))
+        ret[#ret + 1] = tonumber(str_sub(_s, cur_pos))
 
         return ret
     end
@@ -317,12 +372,15 @@ else
 
     local queue = queue or {}
 
+    local flag_testing = true
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
         local _path = netlib_rstring()
         local uid   = netlib_ruint64()
         local size  = tonumber(netlib_rstring())
+
+        if flag_testing then goto no_existence_chk end
 
         if file.Exists(_path, "GAME") and size == file.Size(_path, "GAME") then
             netlib_start("mdlstream_ack")
@@ -332,6 +390,8 @@ else
 
             return
         end
+
+        :: no_existence_chk ::
 
         local function action()
             netlib_start("mdlstream_ack")
@@ -439,7 +499,7 @@ else
             local tlapse = systime() - temp[uid][3]
 
             print(mstr"took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
-                    .. " recv & build, '" .. path .. "'", "from " .. user:SteamID64() .. ";"
+                    .. " recv & build, '" .. path .. "' from " .. user:SteamID64() .. ";"
                     .. " avg spd, " .. string.NiceSize(file_size(path, "DATA") / tlapse) .. "/s")
 
             --- Clears garbage
@@ -463,13 +523,3 @@ else
         netlib_send(user)
     end)
 end
-
---- Testing only
--- if CLIENT and LocalPlayer() then
---     mdlstream.SendRequest("models/alyx.phy", function() print("alyx phy download success callback") end)
---     mdlstream.SendRequest("models/alyx.mdl");    mdlstream.SendRequest("models/alyx.vvd")
---     mdlstream.SendRequest("models/kleiner.mdl"); mdlstream.SendRequest("models/kleiner.phy")
---     mdlstream.SendRequest("models/dog.mdl")
--- elseif SERVER then
---     game.MountGMA("data/models/dog.mdl.gma")
--- end
