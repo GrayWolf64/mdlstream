@@ -383,7 +383,7 @@ else
 
     local queue = queue or {}
 
-    local flag_testing = true
+    local flag_testing = false
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
