@@ -242,28 +242,32 @@ if CLIENT then
             if not exceeds_max then
                 netlib_wbdata(_content)
 
-                stdout_append("single-frame sent: " .. filename)
+                stdout_append(filename .. " ok")
             else
                 netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
 
                 netlib_wuint(realmax_msg_size)
+
+                stdout_append("starting frame sent: " .. filename)
             end
         elseif _mode == 101 then
             local pos      = netlib_ruint()
-
-            stdout_append("progress: " .. filename .. tostring(math.floor((pos / #_content) * 100)) .. "%")
 
             local exceeds_max = #_content - pos > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
+
+                stdout_append(filename .. " ok")
             else
                 local _endpos = pos + realmax_msg_size
 
                 netlib_wbdata(str_sub(_content, pos + 1, _endpos))
 
                 netlib_wuint(_endpos)
+
+                stdout_append(string.format("progress: %s %u%%", filename, math.floor((pos / #_content) * 100)))
             end
         end
 
@@ -282,11 +286,9 @@ if CLIENT then
     mdlstream.SendRequest = send_request
 
     concommand.Add("mdt", function()
-        if not LocalPlayer():IsAdmin() then print(mstr"access violation") return end
-
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
-        window:SetTitle("MDLStream Debugging Tool") window:MakePopup()
+        window:SetTitle("MDLStream Debugging Tool") window:MakePopup() window:SetDeleteOnClose(false)
 
         window.lblTitle:SetFont("BudgetLabel")
 
@@ -318,14 +320,24 @@ if CLIENT then
         stdout:SetParent(con) stdout:Dock(FILL) stdout:DockMargin(0, 0, 0, 4) stdout:Show()
 
         local cmd = vgui.Create("DTextEntry", window)
-        cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DebugFixed")
+        cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DefaultFixed") cmd:SetUpdateOnType(true)
 
-        --- TODO: argparse
+        local cmds = {
+            request   = function(_s) if LocalPlayer():IsAdmin() then send_request(string.sub(_s, 9, #_s)) else stdout_append("access violation") end end,
+            showtemp  = function(_s) stdout_append(table.ToString(ctemp, "ctemp", true)) end,
+            myrealmax = function(_s) stdout_append(realmax_msg_size) end
+        }
+
+        cmd.GetAutoComplete = function(self, _s)
+            local suggestions = {}
+            for _c in pairs(cmds) do if string.StartsWith(_c, _s) then suggestions[#suggestions + 1] = _c end end
+            return suggestions
+        end
+
         cmd.OnEnter = function(self, _s)
-            if string.StartsWith(_s, "send_request") then
-                send_request(string.sub(_s, 14, #_s))
-            end
-
+            local match = false
+            for _c , _f in pairs(cmds) do if string.StartsWith(_s, _c) then _f(_s) match = true end end
+            if not match then stdout_append("syntax error!") else self:AddHistory(_s) end
             self:SetText("")
         end
     end)
@@ -498,9 +510,9 @@ else
 
             local tlapse = systime() - temp[uid][3]
 
-            print(mstr"took " .. string.FormattedTime(tlapse, "%03i:%03i:%03i")
-                    .. " recv & build, '" .. path .. "' from " .. user:SteamID64() .. ";"
-                    .. " avg spd, " .. string.NiceSize(file_size(path, "DATA") / tlapse) .. "/s")
+            print(string.format(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
+                string.FormattedTime(tlapse, "%03i:%03i:%03i"), path,
+                user:SteamID64(), string.NiceSize(file_size(path, "DATA") / tlapse)))
 
             --- Clears garbage
             temp[uid] = nil
