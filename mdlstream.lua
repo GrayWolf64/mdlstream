@@ -61,6 +61,8 @@ local file_size           = file.Size
 
 local mstr                = function(_s) return "MDLStream: " .. _s end
 
+local str_startswith      = function(_s, start) return str_sub(_s, 1, #start) == start end
+
 if CLIENT then
     local lzma             = util.Compress
 
@@ -297,9 +299,9 @@ if CLIENT then
 
             if (IsValid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
 
-            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0) self.btnClose:SetSize(24, 24 )
-            self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24 )
-            self.btnMinim:SetPos(self:GetWide() - 24 * 3 - 4, 0) self.btnMinim:SetSize(24, 24 )
+            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0) self.btnClose:SetSize(24, 24)
+            self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24)
+            self.btnMinim:SetPos(self:GetWide() - 24 * 3 - 4, 0) self.btnMinim:SetSize(24, 24)
             self.lblTitle:SetPos(8 + title_push, 2) self.lblTitle:SetSize(self:GetWide() - 25 - title_push, 20)
         end
 
@@ -312,10 +314,7 @@ if CLIENT then
         local con = vgui.Create("DPanel", window)
         con:Dock(FILL) con:DockMargin(0, 0, 0, 4)
 
-        con.Paint = function(self, w, h)
-            surface.SetDrawColor(215, 215, 215)
-            surface.DrawRect(0, 0, w, h)
-        end
+        con.Paint = function(self, w, h) surface.SetDrawColor(215, 215, 215) surface.DrawRect(0, 0, w, h) end
 
         stdout:SetParent(con) stdout:Dock(FILL) stdout:DockMargin(0, 0, 0, 4) stdout:Show()
 
@@ -330,13 +329,13 @@ if CLIENT then
 
         cmd.GetAutoComplete = function(self, _s)
             local suggestions = {}
-            for _c in pairs(cmds) do if string.StartsWith(_c, _s) then suggestions[#suggestions + 1] = _c end end
+            for _c in pairs(cmds) do if str_startswith(_c, _s) then suggestions[#suggestions + 1] = _c end end
             return suggestions
         end
 
         cmd.OnEnter = function(self, _s)
             local match = false
-            for _c , _f in pairs(cmds) do if string.StartsWith(_s, _c) then _f(_s) match = true end end
+            for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
             if not match then stdout_append("syntax error!") else self:AddHistory(_s) end
             self:SetText("")
         end
@@ -442,7 +441,7 @@ else
     local function wgma(_path, _content, _uid)
         local path_gma = string.gsub(_path, "%/", "//") .. ".gma"
         local _f = file.Open(path_gma, "wb", "DATA")
-        if not string.StartsWith(_path, "models/") then _path = "models/" .. _path end
+        if not str_startswith(_path, "models/") then _path = "models/" .. _path end
 
         _f:Write("GMAD") _f:WriteByte(3) -- ver
 
@@ -494,7 +493,7 @@ else
 
             local path = temp[uid][2]
 
-            if string.StartsWith(path, "data/") then path = str_sub(path, 6) end
+            if str_startswith(path, "data/") then path = str_sub(path, 6) end
 
             file.CreateDir(string.GetPathFromFilename(path))
 
