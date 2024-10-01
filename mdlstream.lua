@@ -321,9 +321,15 @@ if CLIENT then
         local cmd = vgui.Create("DTextEntry", window)
         cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DefaultFixed") cmd:SetUpdateOnType(true)
 
+        cmd.Paint = function(self, w, h)
+            surface.SetDrawColor(240, 240, 240) surface.DrawRect(0, 0, w, h)
+            surface.SetDrawColor(127, 127, 127) surface.DrawOutlinedRect(0, 0, w, h, 1)
+            self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
+        end
+
         local cmds = {
             request   = function(_s) if LocalPlayer():IsAdmin() then send_request(string.sub(_s, 9, #_s)) else stdout_append("access violation") end end,
-            showtemp  = function(_s) for i, t in pairs(ctemp) do stdout_append(string.format("id = %i, path = %s", i, t[2])) end end,
+            showtemp  = function(_s) if #ctemp == 0 then stdout_append("ctemp empty") return end for i, t in pairs(ctemp) do stdout_append(string.format("id = %i, path = %s", i, t[2])) end end,
             myrealmax = function(_s) stdout_append(realmax_msg_size) end,
             clearcon  = function() stdout:SetText("") end
         }
@@ -384,7 +390,7 @@ else
 
     local queue = queue or {}
 
-    local flag_testing = true
+    local flag_testing = false
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
