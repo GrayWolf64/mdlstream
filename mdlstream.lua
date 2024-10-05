@@ -2,9 +2,11 @@
 -- Sync necessary files of client models to server so that server can initialize models' physics
 -- For use with cloud asset related addons
 -- Specifications:
--- Max file size: 8 MB
+-- Max file size: 8.75 MB
 -- Limited file formats
 -- Handshake styled transmission
+--
+-- !If you are server owner, I suggest you using https://github.com/WilliamVenner/gmsv_workshop/ for better experience
 --
 -- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks(acknowledge) ==> Client receives Blink
 -- ==> Client sends frame ==> Server receives frame ==> Server builds file(transmisson finished) / Server Blinks
@@ -21,14 +23,15 @@ if not gmod or game.SinglePlayer() then return end
 mdlstream = {}
 
 --- Shared konstants(not necessarily)
-local max_msg_size         = 65536 - 3 - 1 - 3 - 3 - 8 - 10000 -- bytes, 0.054 MB, around 150 msgs to transmit a 8 MB file
+-- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 9000
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
 -- 3 for #content(slice / frame) length
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
--- 10000 spared for testing the most optimal size
+-- 9000 spared for testing the most optimal size
 
 local tonumber            = tonumber
 
@@ -45,6 +48,7 @@ local netlib_ruint        = function() return net.ReadUInt(24) end
 --- dedicated to read and write response mode, max = 255
 --
 --   0: Server has refused request(file already exists on server)
+--   1: Server has built file and sends an ack for finalization
 -- 100: Server has accepted Client's request, awaits the first frame
 -- 101: Server awaits subsequent frame
 -- 200: Client sends a frame that can be received and built on Server using previously received frames or
@@ -57,11 +61,15 @@ local str_sub             = string.sub
 local tblib_concat        = table.concat
 local tblib_remove        = table.remove
 
+local str_fmt             = string.format
+
 local file_size           = file.Size
 
 local mstr                = function(_s) return "MDLStream: " .. _s end
 
 local str_startswith      = function(_s, start) return str_sub(_s, 1, #start) == start end
+
+local file_open           = function(_f, _m, _p) local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 0) end return __f end
 
 if CLIENT then
     local lzma             = util.Compress
@@ -79,23 +87,18 @@ if CLIENT then
 
     local realmax_msg_size = max_msg_size
 
-    -- bytes, 8 MB
-    local max_file_size    = 8000000
+    local max_file_size    = 8750000
 
     -- VALIDATE ME: does server really need some of them?
-    local file_formats  = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
+    local file_formats     = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
 
-    local function netlib_wbdata(_data)
-        local _len = #_data
-        netlib_wuint(_len)
-        net.WriteData(_data, _len)
-    end
+    local function netlib_wbdata(_data) local _len = #_data netlib_wuint(_len) net.WriteData(_data, _len) end
 
     local stdout = vgui.Create("RichText") stdout:Hide()
 
     local function stdout_append(_s)
-        stdout:InsertColorChange(108, 166, 205, 255) stdout:AppendText(os.date("%H:%M:%S") .. " ")
-        stdout:InsertColorChange(0, 0, 0, 225) stdout:AppendText(_s .. "\n")
+        stdout:InsertColorChange(0, 205, 50, 255) stdout:AppendText(os.date("%H:%M:%S") .. " ")
+        stdout:InsertColorChange(0, 0, 0, 225)    stdout:AppendText(_s .. "\n")
     end
 
     local mdl_determinant = {
@@ -114,8 +117,7 @@ if CLIENT then
 
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
     local function validate_header(_path)
-        local _file = file.Open(_path, "rb", "GAME")
-        if not _file then return false end
+        local _file = file_open(_path, "rb", "GAME")
 
         if _file:Read(2) == "MZ" then return false end
         _file:Skip(-2)
@@ -123,20 +125,12 @@ if CLIENT then
         --- Currently, only mdl's header check is implemented
         if str_ext_fromfile(_path) ~= "mdl" then return true end
 
-        local function read_cint()
-            return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)}
-        end
+        local function read_cint() return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
 
-        local function hext_to_int(_t)
-            return tonumber(string.format("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1]))
-        end
+        local function hext_to_int(_t) return tonumber(str_fmt("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1])) end
 
         local studiohdr_t = {
-            id       = read_cint(),
-            version  = read_cint(),
-            checksum = read_cint(),
-            name     = _file:Read(64),
-            datalen  = read_cint()
+            id = read_cint(), version = read_cint(), checksum = read_cint(), name = _file:Read(64), datalen = read_cint()
         }
 
         _file:Close()
@@ -155,7 +149,7 @@ if CLIENT then
     end
 
     local function bytes_table(_path)
-        local _file = file.Open(_path, "rb", "GAME")
+        local _file = file_open(_path, "rb", "GAME")
 
         local bytes = {}
 
@@ -181,7 +175,7 @@ if CLIENT then
 
         local size = file_size(path, "GAME")
 
-        assert(size <= max_file_size, mstr"Tries to send file larger than 8 MB, "          .. path)
+        assert(size <= max_file_size, mstr"Tries to send file larger than 8.75 MB, "       .. path)
         assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), " .. path)
 
         if not callback or not isfunction(callback) then callback = fun_donothing end
@@ -198,29 +192,38 @@ if CLIENT then
     end
 
     --- Based on assumptions
-    -- In the worst case, a 8 MB file takes about 3 thousand messages to transmit,
     -- we'd better hope that this client's net condition will get better,
     -- otherwise, he will probably wait forever or quit and get some better gear
-    local function adjust_max_msg_size()
+    local function adjust_max_msg_size(_do_limit)
         if not LocalPlayer() then return end
 
         local ping = LocalPlayer():Ping()
 
         if     ping <= 30                 then realmax_msg_size = max_msg_size
-        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 6000
-        elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 16000
-        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 28000
+        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 5000
+        elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 15000
+        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 27000
         else                                   realmax_msg_size = 24000 end
     end
 
     local function w_framemode(_exceeds) if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end end
 
+    -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_ack", function()
-        local _mode = netlib_ruintm()
-        local uid   = netlib_ruint64()
+        local _mode    = netlib_ruintm()
+        local uid      = netlib_ruint64()
 
         if _mode == 0 then
-            print(mstr"cl request refused (identically sized and named file already exists serverside), " .. ctemp[uid][2])
+            stdout_append(str_fmt("request rejected(identically sized and named file already exists serverside: %s)", ctemp[uid][2]))
+            ctemp[uid] = nil
+
+            return
+        elseif _mode == 1 then
+            local is_ok = pcall(ctemp[uid][3])
+
+            stdout_append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)))
+
+            --- Clears garbage on client's delicate computer
             ctemp[uid] = nil
 
             return
@@ -234,59 +237,54 @@ if CLIENT then
 
         local _content = ctemp[uid][1]
 
-        local filename = string.GetFileFromFilename(ctemp[uid][2])
-
         --- May better simplify section below
+        local exceeds_max, pos
         if _mode == 100 then
-            local exceeds_max = #_content > realmax_msg_size
+            exceeds_max = #_content > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(_content)
-
-                stdout_append(filename .. " ok")
             else
                 netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
-
                 netlib_wuint(realmax_msg_size)
-
-                stdout_append("starting frame sent: " .. filename)
             end
         elseif _mode == 101 then
-            local pos      = netlib_ruint()
+            pos         = netlib_ruint()
+            exceeds_max = #_content - pos > realmax_msg_size
 
-            local exceeds_max = #_content - pos > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
                 netlib_wbdata(str_sub(_content, pos + 1, #_content))
-
-                stdout_append(filename .. " ok")
             else
                 local _endpos = pos + realmax_msg_size
 
                 netlib_wbdata(str_sub(_content, pos + 1, _endpos))
-
                 netlib_wuint(_endpos)
-
-                stdout_append(string.format("progress: %s %u%%", filename, math.floor((pos / #_content) * 100)))
             end
         end
 
         netlib_toserver()
-    end)
 
-    netlib_set_receiver("mdlstream_fin", function()
-        local uid = netlib_ruint64()
+        local filename = ctemp[uid][2]
 
-        pcall(ctemp[uid][3])
-
-        --- Clears garbage on client's delicate computer
-        ctemp[uid] = nil
+        if exceeds_max then
+            if _mode == 100 then
+                stdout_append("starting frame sent: " .. filename)
+            elseif _mode == 101 then
+                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_content) * 100)))
+            end
+        else
+            if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename) end
+        end
     end)
 
     mdlstream.SendRequest = send_request
 
+    ---
+    --  Debugger part
+    --
     concommand.Add("mdt", function()
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
@@ -299,16 +297,18 @@ if CLIENT then
 
             if (IsValid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
 
-            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0) self.btnClose:SetSize(24, 24)
+            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0)     self.btnClose:SetSize(24, 24)
             self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24)
             self.btnMinim:SetPos(self:GetWide() - 24 * 3 - 4, 0) self.btnMinim:SetSize(24, 24)
-            self.lblTitle:SetPos(8 + title_push, 2) self.lblTitle:SetSize(self:GetWide() - 25 - title_push, 20)
+            self.lblTitle:SetPos(8 + title_push, 2)              self.lblTitle:SetSize(self:GetWide() - 25 - title_push, 20)
         end
 
+        local grad_mat = Material("gui/gradient")
         window.Paint = function(self, w, h)
-            surface.SetDrawColor(240, 240, 240) surface.DrawRect(0, 0, w, h)
-            surface.SetDrawColor(0, 0, 0) surface.DrawOutlinedRect(0, 0, w, h, 1.5)
-            surface.SetDrawColor(77, 79, 204) surface.DrawRect(1, 1, w - 1.5, 23)
+            surface.SetDrawColor(240, 240, 240)    surface.DrawRect(0, 0, w, h)
+            surface.SetDrawColor(0, 0, 0)          surface.DrawOutlinedRect(0, 0, w, h, 1.5)
+            surface.SetDrawColor(77, 79, 204, 215) surface.DrawRect(1, 1, w - 1.5, 23)
+            surface.SetDrawColor(77, 79, 204)      surface.SetMaterial(grad_mat) surface.DrawTexturedRect(1, 1, w - 1.5, 23)
         end
 
         local con = vgui.Create("DPanel", window)
@@ -322,25 +322,32 @@ if CLIENT then
         cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DefaultFixed") cmd:SetUpdateOnType(true)
 
         cmd.Paint = function(self, w, h)
-            surface.SetDrawColor(240, 240, 240) surface.DrawRect(0, 0, w, h)
+            surface.SetDrawColor(225, 225, 225) surface.DrawRect(0, 0, w, h)
             surface.SetDrawColor(127, 127, 127) surface.DrawOutlinedRect(0, 0, w, h, 1)
             self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
         end
 
         local cmds = {
-            request   = function(_s) if LocalPlayer():IsAdmin() then send_request(string.sub(_s, 9, #_s)) else stdout_append("access violation") end end,
-            showtemp  = function(_s) if #ctemp == 0 then stdout_append("ctemp empty") return end for i, t in pairs(ctemp) do stdout_append(string.format("id = %i, path = %s", i, t[2])) end end,
+            request   = function(_s)
+                if LocalPlayer():IsAdmin() then send_request(str_sub(_s, 9, #_s))
+                else stdout_append("access violation: not admin") end
+            end,
+            showtemp  = function(_s)
+                if table.IsEmpty(ctemp) then stdout_append("ctemp empty") return end
+                for i, t in pairs(ctemp) do stdout_append(str_fmt("id = %i, path = %s", i, t[2])) end
+            end,
             myrealmax = function(_s) stdout_append(realmax_msg_size) end,
-            clearcon  = function() stdout:SetText("") end
+            clearcon  = function()   stdout:SetText("") end
         }
 
         cmd.GetAutoComplete = function(self, _s)
-            local suggestions = {}
-            for _c in pairs(cmds) do if str_startswith(_c, _s) then suggestions[#suggestions + 1] = _c end end
-            return suggestions
+            local sug = {}
+            for _c in pairs(cmds) do if str_startswith(_c, _s) then sug[#sug + 1] = _c end end
+            return sug
         end
 
         cmd.OnEnter = function(self, _s)
+            stdout_append("<< " .. _s)
             local match = false
             for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
             if not match then stdout_append("syntax error!") else self:AddHistory(_s) end
@@ -365,22 +372,14 @@ else
     util.AddNetworkString"mdlstream_req"
     util.AddNetworkString"mdlstream_frm" -- or Slice
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
-    util.AddNetworkString"mdlstream_fin" -- Final
 
     local function deserialize_table(_s)
-        local ret = {}
-        local cur_pos, pos = 1, nil
+        local ret, cur_pos, pos = {}, 1, nil
 
-        for i = 1, #_s do
-            pos = str_find(_s, ",", cur_pos, true)
-
+        for i = 1, #_s do pos = str_find(_s, ",", cur_pos, true)
             if not pos then break end
-
-            ret[i] = tonumber(str_sub(_s, cur_pos, pos - 1))
-            cur_pos = pos + 1
-        end
-
-        ret[#ret + 1] = tonumber(str_sub(_s, cur_pos))
+            ret[i], cur_pos = tonumber(str_sub(_s, cur_pos, pos - 1)), pos + 1
+        end ret[#ret + 1]   = tonumber(str_sub(_s, cur_pos))
 
         return ret
     end
@@ -426,7 +425,7 @@ else
         queue[#queue + 1] = {[1] = action, [2] = false, [3] = user, [4] = size}
     end)
 
-    do local front local cmp_size = function(e1, e2) return e1[4] < e2[4] end
+    do local front, front2 local cmp_size = function(e1, e2) return e1[4] < e2[4] end
         timer.Create("mdlstream_watcher", 0.875, 0, function()
             front = queue[1]
 
@@ -447,7 +446,7 @@ else
     -- https://github.com/Facepunch/gmad/blob/master/include/AddonReader.h
     local function wgma(_path, _content, _uid)
         local path_gma = string.gsub(_path, "%/", "//") .. ".gma"
-        local _f = file.Open(path_gma, "wb", "DATA")
+        local _f = file_open(path_gma, "wb", "DATA")
         if not str_startswith(_path, "models/") then _path = "models/" .. _path end
 
         _f:Write("GMAD") _f:WriteByte(3) -- ver
@@ -475,17 +474,16 @@ else
 
         _f:Flush()
 
-        local __content = file.Read(path_gma, "DATA")
-        _f:WriteULong(tonumber(util.CRC(__content)))
+        _f:WriteULong(tonumber(util.CRC(file.Read(path_gma, "DATA"))))
 
         _f:Close()
     end
 
+    -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
         local frame_type = netlib_ruintm()
-
-        local content = netlib_rdata(netlib_ruint())
+        local content    = netlib_rdata(netlib_ruint())
 
         if frame_type == 200 then
             local bytes
@@ -504,7 +502,7 @@ else
 
             file.CreateDir(string.GetPathFromFilename(path))
 
-            local _file = file.Open(path, "wb", "DATA")
+            local _file = file_open(path, "wb", "DATA")
 
             for i = 1, #bytes do
                 cfile_wbyte(_file, bytes[i])
@@ -516,7 +514,7 @@ else
 
             local tlapse = systime() - temp[uid][3]
 
-            print(string.format(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
+            print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
                 string.FormattedTime(tlapse, "%03i:%03i:%03i"), path,
                 user:SteamID64(), string.NiceSize(file_size(path, "DATA") / tlapse)))
 
@@ -525,7 +523,8 @@ else
 
             tblib_remove(queue, 1)
 
-            netlib_start("mdlstream_fin")
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(1)
             netlib_wuint64(uid)
         elseif frame_type == 201 then
             temp[uid][1][#temp[uid][1] + 1] = content
