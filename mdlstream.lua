@@ -24,7 +24,7 @@ mdlstream = {}
 
 --- Shared konstants(not necessarily)
 -- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 9000
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11000
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
@@ -194,7 +194,7 @@ if CLIENT then
     --- Based on assumptions
     -- we'd better hope that this client's net condition will get better,
     -- otherwise, he will probably wait forever or quit and get some better gear
-    local function adjust_max_msg_size(_do_limit)
+    local function adjust_max_msg_size()
         if not LocalPlayer() then return end
 
         local ping = LocalPlayer():Ping()
@@ -425,7 +425,7 @@ else
         queue[#queue + 1] = {[1] = action, [2] = false, [3] = user, [4] = size}
     end)
 
-    do local front, front2 local cmp_size = function(e1, e2) return e1[4] < e2[4] end
+    do local front local cmp_size = function(e1, e2) return e1[4] < e2[4] end
         timer.Create("mdlstream_watcher", 0.875, 0, function()
             front = queue[1]
 
