@@ -31,7 +31,7 @@ local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11000
 -- 3 for #content(slice / frame) length
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
--- 9000 spared for testing the most optimal size
+-- 11000 spared for testing the most optimal size
 
 local tonumber            = tonumber
 
