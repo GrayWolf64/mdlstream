@@ -352,7 +352,7 @@ if CLIENT then
                 if table.IsEmpty(ctemp) then stdout_append("ctemp empty") return end
                 for i, t in pairs(ctemp) do stdout_append(str_fmt("id = %i, path = %s", i, t[2])) end
             end,
-            myrealmax = function(_s) stdout_append(realmax_msg_size) end,
+            myrealmax = function() stdout_append(realmax_msg_size) end,
             clearcon  = function()   stdout:SetText("") end
         }
 
