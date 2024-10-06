@@ -79,7 +79,6 @@ if CLIENT then
 
     local cfile_eof        = FindMetaTable("File").EndOfFile
     local cfile_rbyte      = FindMetaTable("File").ReadByte
-    local cfile_rbyte      = FindMetaTable("File").ReadByte
 
     local str_ext_fromfile = string.GetExtensionFromFilename
 
