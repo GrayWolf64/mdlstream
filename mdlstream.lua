@@ -100,12 +100,14 @@ if CLIENT then
 
     local function netlib_wbdata(_data) local _len = #_data netlib_wuint(_len) net.WriteData(_data, _len) end
 
-    local stdout = vgui.Create("RichText") stdout:Hide()
+    local stdout = stdout or vgui.Create("RichText") stdout:Hide()
 
     local function stdout_append(_s)
         stdout:InsertColorChange(0, 205, 50, 255) stdout:AppendText(os.date("%H:%M:%S") .. " ")
         stdout:InsertColorChange(0, 0, 0, 225)    stdout:AppendText(_s .. "\n")
     end
+
+    stdout_append("type some chars to reveal suggestions")
 
     local mdl_determinant = {
         id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
@@ -176,8 +178,8 @@ if CLIENT then
 
     local function send_request(path, callback)
         assert(isstring(path),                       mstr"'path' is not a string")
-        assert(file.Exists(path, "GAME"),            mstr"desired 'filepath' does not exist on client, " .. path)
-        assert(file_formats[str_ext_fromfile(path)], mstr"Tries to send unsupported file, "              .. path)
+        assert(file.Exists(path, "GAME"),            mstr"desired filepath does not exist on client, " .. path)
+        assert(file_formats[str_ext_fromfile(path)], mstr"Tries to send unsupported file, "            .. path)
 
         local size = file_size(path, "GAME")
 
