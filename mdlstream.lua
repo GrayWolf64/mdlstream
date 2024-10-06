@@ -65,10 +65,10 @@ local netlib_wuintm       = function(_uint) net.WriteUInt(_uint, 8) end
 local netlib_ruintm       = function() return net.ReadUInt(8) end
 
 local str_sub             = string.sub
+local str_fmt             = string.format
+
 local tblib_concat        = table.concat
 local tblib_remove        = table.remove
-
-local str_fmt             = string.format
 
 local file_size           = file.Size
 
@@ -543,7 +543,7 @@ else
             local tlapse = systime() - temp[uid][3]
 
             print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
-                string.FormattedTime(tlapse, "%03i:%03i:%03i"), path,
+                string.FormattedTime(tlapse, "%02i:%02i:%02i"), path,
                 user:SteamID64(), string.NiceSize(file_size(path, "DATA") / tlapse)))
 
             --- Clears garbage
