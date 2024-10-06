@@ -1,23 +1,25 @@
 --- MDLStream
 -- Sync necessary files of client models to server so that server can initialize models' physics
 -- For use with cloud asset related addons
+--
 -- Specifications:
 -- Max file size: 8.75 MB
 -- Limited file formats
 -- Handshake styled transmission
 --
 -- !If you are server owner, I suggest you using https://github.com/WilliamVenner/gmsv_workshop/ for better experience
+-- You can of course use this as a fallback option
 --
 -- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks(acknowledge) ==> Client receives Blink
--- ==> Client sends frame ==> Server receives frame ==> Server builds file(transmisson finished) / Server Blinks
--- ==> Client receives Blink ==> Client sends frame ==> ... Until all frames of file content are fully received, then build(transmisson finished)
+-- ==> Client sends frame ==> Server receives frame ==> Server builds file(transmisson finished) / Server Blinks ==> Client
+-- receives Blink ==> Client sends frame ==> ... Until all frames of file content are fully received, then build(finished)
 --
 -- @author GrayWolf, RiceMCUT, Wolf109909
 -- @license Apache License 2.0
 --
 -- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
--- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel
--- for some crucial hints on mdl header1
+-- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel for some crucial hints on mdl header1
+--
 if not gmod or game.SinglePlayer() then return end
 
 mdlstream = {}
