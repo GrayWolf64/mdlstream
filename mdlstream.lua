@@ -27,7 +27,10 @@ mdlstream = {}
 ---
 --* Switches
 --
+-- `flag_testing`: Disables file existence check serverside
+-- `flag_noclui`:  Disables clientside debugger GUI; Directs some terminal(debugger ui) messages to engine console
 local flag_testing = false
+local flag_noclui  = false
 
 --- Shared konstants(not necessarily)
 -- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
@@ -215,7 +218,7 @@ if CLIENT then
         elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 5000
         elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 15000
         elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 27000
-        else                                   realmax_msg_size = 24000 end
+        else                                   realmax_msg_size = 20000 end
     end
 
     local function w_framemode(_exceeds) if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end end
@@ -297,11 +300,19 @@ if CLIENT then
     ---
     --* Debugger part
     --
+    if flag_noclui then
+        stdout_append = function(_s) print(mstr(_s)) end
+        stdout:Remove()
+
+        return
+    end
+
     local surf_set_drawcolor     = surface.SetDrawColor
     local surf_drawrect          = surface.DrawRect
     local surf_drawrect_outline  = surface.DrawOutlinedRect
     local surf_setmaterial       = surface.SetMaterial
     local surf_drawrect_textured = surface.DrawTexturedRect
+
     concommand.Add("mdt", function()
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
