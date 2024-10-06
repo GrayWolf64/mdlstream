@@ -22,6 +22,11 @@ if not gmod or game.SinglePlayer() then return end
 
 mdlstream = {}
 
+---
+--* Switches
+--
+local flag_testing = false
+
 --- Shared konstants(not necessarily)
 -- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
 local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11000
@@ -69,7 +74,7 @@ local mstr                = function(_s) return "MDLStream: " .. _s end
 
 local str_startswith      = function(_s, start) return str_sub(_s, 1, #start) == start end
 
-local file_open           = function(_f, _m, _p) local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 0) end return __f end
+local file_open           = function(_f, _m, _p) local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 2) end return __f end
 
 if CLIENT then
     local lzma             = util.Compress
@@ -282,7 +287,7 @@ if CLIENT then
     mdlstream.SendRequest = send_request
 
     ---
-    --  Debugger part
+    --* Debugger part
     --
     concommand.Add("mdt", function()
         local window = vgui.Create("DFrame")
@@ -388,7 +393,6 @@ else
 
     local queue = queue or {}
 
-    local flag_testing = false
     netlib_set_receiver("mdlstream_req", function(_, user)
         if not isvalid(user) then return end
 
@@ -421,19 +425,37 @@ else
             netlib_send(user)
         end
 
-        queue[#queue + 1] = {[1] = action, [2] = false, [3] = user, [4] = size}
+        --- [2]: is this task ran?
+        queue[#queue + 1] = {[1] = action, [2] = false, [3] = user, [4] = size, [5] = uid}
     end)
 
-    do local front local cmp_size = function(e1, e2) return e1[4] < e2[4] end
-        timer.Create("mdlstream_watcher", 0.875, 0, function()
+    do local front = nil
+        --- Sort based on IsValid(user), ping and requested file size(factor weight: decreasing)
+        local function cmp(e1, e2)
+            if e1[3]:Ping() ~= e2[3]:Ping() then return e1[3]:Ping() < e2[3]:Ping()
+            elseif    e1[4] ~= e2[4]        then return e1[4] < e2[4] end
+        end
+
+        --- Do we have any ran tasks in queue but not removed?(unfinished)
+        -- currently, only allow 1 ran tasks max. otherwise, buffer overflows easily
+        local function is_ready()
+            for i = 1, #queue do if queue[i][2] == true then return false end end
+            return true
+        end
+
+        timer.Create("mdlstream_watcher", 1, 0, function()
+            if #queue == 0 then return end
+
+            --- It's unnecessary to deal with disconnected players' requests
+            for i = 1, #queue, -1 do if not isvalid(queue[i][3]) then tblib_remove(queue, i) end end
+
+            if #queue == 0 then return end
+
+            tblib_sort(queue, cmp)
+
             front = queue[1]
 
-            --- gone player has occupied the first slot in queue, abandon it
-            if front and not isvalid(front[3]) then tblib_remove(queue, 1) end
-
-            if not front or front[2] then return end
-
-            tblib_sort(queue, cmp_size)
+            if front[2] or not is_ready() then return end
 
             queue[1][1]()
             queue[1][2] = true
@@ -467,7 +489,7 @@ else
         _f:WriteUInt64(file.Size(_path, "DATA"))
         _f:WriteULong(tonumber(util.CRC(_path)))
 
-        _f:WriteULong(0)
+        _f:WriteULong(0) -- indicates end of file(s)
 
         _f:Write(_content)
 
@@ -520,7 +542,8 @@ else
             --- Clears garbage
             temp[uid] = nil
 
-            tblib_remove(queue, 1)
+            --- Removes completed task from queue
+            for i = 1, #queue do if queue[i][5] == uid then tblib_remove(queue, i) break end end
 
             netlib_start("mdlstream_ack")
             netlib_wuintm(1)
