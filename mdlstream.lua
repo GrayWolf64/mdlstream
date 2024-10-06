@@ -76,7 +76,10 @@ local mstr                = function(_s) return "MDLStream: " .. _s end
 
 local str_startswith      = function(_s, start) return str_sub(_s, 1, #start) == start end
 
-local file_open           = function(_f, _m, _p) local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 2) end return __f end
+local file_open           = function(_f, _m, _p)
+                                local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 2) end
+                                return __f
+                            end
 
 if CLIENT then
     local lzma             = util.Compress
