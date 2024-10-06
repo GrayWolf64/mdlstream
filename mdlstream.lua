@@ -41,6 +41,7 @@ local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11000
 -- 11000 spared for testing the most optimal size
 
 local tonumber            = tonumber
+local isvalid             = IsValid
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -296,6 +297,11 @@ if CLIENT then
     ---
     --* Debugger part
     --
+    local surf_set_drawcolor     = surface.SetDrawColor
+    local surf_drawrect          = surface.DrawRect
+    local surf_drawrect_outline  = surface.DrawOutlinedRect
+    local surf_setmaterial       = surface.SetMaterial
+    local surf_drawrect_textured = surface.DrawTexturedRect
     concommand.Add("mdt", function()
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
@@ -303,10 +309,9 @@ if CLIENT then
 
         window.lblTitle:SetFont("BudgetLabel")
 
+        local title_push = 0
         window.PerformLayout = function(self)
-            local title_push = 0
-
-            if (IsValid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
+            if (isvalid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
 
             self.btnClose:SetPos(self:GetWide() - 24 - 4, 0)     self.btnClose:SetSize(24, 24)
             self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24)
@@ -315,17 +320,17 @@ if CLIENT then
         end
 
         local grad_mat = Material("gui/gradient")
-        window.Paint = function(self, w, h)
-            surface.SetDrawColor(240, 240, 240)    surface.DrawRect(0, 0, w, h)
-            surface.SetDrawColor(0, 0, 0)          surface.DrawOutlinedRect(0, 0, w, h, 1.5)
-            surface.SetDrawColor(77, 79, 204, 215) surface.DrawRect(1, 1, w - 1.5, 23)
-            surface.SetDrawColor(77, 79, 204)      surface.SetMaterial(grad_mat) surface.DrawTexturedRect(1, 1, w - 1.5, 23)
+        window.Paint = function(_, w, h)
+            surf_set_drawcolor(240, 240, 240)    surf_drawrect(0, 0, w, h)
+            surf_set_drawcolor(0, 0, 0)          surf_drawrect_outline(0, 0, w, h, 1.5)
+            surf_set_drawcolor(77, 79, 204, 215) surf_drawrect(1, 1, w - 1.5, 23)
+            surf_set_drawcolor(77, 79, 204)      surf_setmaterial(grad_mat) surf_drawrect_textured(1, 1, w - 1.5, 23)
         end
 
         local con = vgui.Create("DPanel", window)
         con:Dock(FILL) con:DockMargin(0, 0, 0, 4)
 
-        con.Paint = function(self, w, h) surface.SetDrawColor(215, 215, 215) surface.DrawRect(0, 0, w, h) end
+        con.Paint = function(_, w, h) surf_set_drawcolor(215, 215, 215) surf_drawrect(0, 0, w, h) end
 
         stdout:SetParent(con) stdout:Dock(FILL) stdout:DockMargin(0, 0, 0, 4) stdout:Show()
 
@@ -333,8 +338,8 @@ if CLIENT then
         cmd:Dock(BOTTOM) cmd:SetHistoryEnabled(true) cmd:SetFont("DefaultFixed") cmd:SetUpdateOnType(true)
 
         cmd.Paint = function(self, w, h)
-            surface.SetDrawColor(225, 225, 225) surface.DrawRect(0, 0, w, h)
-            surface.SetDrawColor(127, 127, 127) surface.DrawOutlinedRect(0, 0, w, h, 1)
+            surf_set_drawcolor(225, 225, 225) surf_drawrect(0, 0, w, h)
+            surf_set_drawcolor(127, 127, 127) surf_drawrect_outline(0, 0, w, h, 1)
             self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
         end
 
@@ -375,8 +380,6 @@ else
     local netlib_rdata   = net.ReadData
 
     local systime        = SysTime
-
-    local isvalid        = IsValid
 
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
