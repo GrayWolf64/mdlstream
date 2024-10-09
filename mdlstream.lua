@@ -107,6 +107,14 @@ if CLIENT then
 
     local function netlib_wbdata(_data) local _len = #_data netlib_wuint(_len) net.WriteData(_data, _len) end
 
+    -- TODO: implement this w/r instead
+    -- TODO: implement method to compress sequence of bytes
+    local function wbdata(_bt)
+        local _size = #_bt
+        netlib_wuint(_size)
+        for i = 1, _size do netlib_wuintm(_bt[i]) end
+    end
+
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
 
     local function stdout_append(_s)
@@ -183,6 +191,7 @@ if CLIENT then
 
     local function uidgen() return string.gsub(tostring(SysTime()), "%.", "", 1) end
 
+    -- TODO: clientside postpone frame dispatch when ping too high/unstable, and a state machine serverside
     local function send_request(path, callback)
         assert(isstring(path),                       mstr"'path' is not a string")
         assert(file.Exists(path, "GAME"),            mstr"desired filepath does not exist on client, " .. path)
