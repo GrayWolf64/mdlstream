@@ -29,7 +29,7 @@ mdlstream = {}
 --
 -- `flag_testing`: Disables file existence check serverside
 -- `flag_noclui`:  Disables clientside debugger GUI; Directs some terminal(debugger ui) messages to engine console
-local flag_testing = false
+local flag_testing = true
 local flag_noclui  = false
 
 --- Shared konstants(not necessarily)
@@ -102,17 +102,16 @@ if CLIENT then
 
     local max_file_size    = 8750000
 
-    -- VALIDATE ME: does server really need some of them?
+    -- FIXME: does server really need some of them?
     local file_formats     = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
 
-    local function netlib_wbdata(_data) local _len = #_data netlib_wuint(_len) net.WriteData(_data, _len) end
-
-    -- TODO: implement this w/r instead
     -- TODO: implement method to compress sequence of bytes
-    local function wbdata(_bt)
+    local function wbdata(_bt, _start, _end)
         local _size = #_bt
-        netlib_wuint(_size)
-        for i = 1, _size do netlib_wuintm(_bt[i]) end
+        if not _end then _end = _size end
+
+        netlib_wuint(_end - _start + 1)
+        for i = _start, _end do netlib_wuintm(_bt[i]) end
     end
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
@@ -206,7 +205,7 @@ if CLIENT then
 
         local uid = uidgen()
 
-        ctemp[uid] = {[1] = lzma(tblib_concat(bytes_table(path), ",")), [2] = path, [3] = callback}
+        ctemp[uid] = {[1] = bytes_table(path), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
@@ -259,32 +258,32 @@ if CLIENT then
 
         adjust_max_msg_size()
 
-        local _content = ctemp[uid][1]
+        local _bt = ctemp[uid][1]
 
         --- May better simplify section below
         local exceeds_max, pos
         if _mode == 100 then
-            exceeds_max = #_content > realmax_msg_size
+            exceeds_max = #_bt > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                netlib_wbdata(_content)
+                wbdata(_bt, 1)
             else
-                netlib_wbdata(str_sub(_content, 1, realmax_msg_size))
+                wbdata(_bt, 1, realmax_msg_size)
                 netlib_wuint(realmax_msg_size)
             end
         elseif _mode == 101 then
             pos         = netlib_ruint()
-            exceeds_max = #_content - pos > realmax_msg_size
+            exceeds_max = #_bt - pos > realmax_msg_size
 
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                netlib_wbdata(str_sub(_content, pos + 1, #_content))
+                wbdata(_bt, pos + 1, nil)
             else
                 local _endpos = pos + realmax_msg_size
 
-                netlib_wbdata(str_sub(_content, pos + 1, _endpos))
+                wbdata(_bt, pos + 1, _endpos)
                 netlib_wuint(_endpos)
             end
         end
@@ -297,7 +296,7 @@ if CLIENT then
             if _mode == 100 then
                 stdout_append("starting frame sent: " .. filename)
             elseif _mode == 101 then
-                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_content) * 100)))
+                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bt) * 100)))
             end
         else
             if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename) end
@@ -407,15 +406,15 @@ else
     util.AddNetworkString"mdlstream_frm" -- or Slice
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
 
-    local function deserialize_table(_s)
-        local ret, cur_pos, pos = {}, 1, nil
+    local function rbdata()
+        local bytes = {}
+        local _size = netlib_ruint()
 
-        for i = 1, #_s do pos = str_find(_s, ",", cur_pos, true)
-            if not pos then break end
-            ret[i], cur_pos = tonumber(str_sub(_s, cur_pos, pos - 1)), pos + 1
-        end ret[#ret + 1]   = tonumber(str_sub(_s, cur_pos))
+        for i = 1, _size do
+            bytes[i] = netlib_ruintm()
+        end
 
-        return ret
+        return bytes
     end
 
     --- I don't want to go oop here, though it may be more elegant
@@ -460,7 +459,7 @@ else
     end)
 
     do local front = nil
-        --- Sort based on IsValid(user), ping and requested file size(factor weight: decreasing)
+        --- Sort based on ping and requested file size(factor weight: decreasing)
         local function cmp(e1, e2)
             if e1[3]:Ping() ~= e2[3]:Ping() then return e1[3]:Ping() < e2[3]:Ping()
             elseif    e1[4] ~= e2[4]        then return e1[4] < e2[4] end
@@ -530,21 +529,27 @@ else
         _f:Close()
     end
 
+    local function merge(dest, src)
+        local _size = #dest
+        for i = 1, #src do
+            dest[_size + i] = src[i]
+        end
+    end
+
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
         local frame_type = netlib_ruintm()
-        local content    = netlib_rdata(netlib_ruint())
+        local content    = rbdata()
 
         if frame_type == 200 then
             local bytes
 
             if #temp[uid][1] == 0 then
-                bytes = deserialize_table(delzma(content))
+                bytes = content
             else
-                temp[uid][1][#temp[uid][1] + 1] = content
-
-                bytes = deserialize_table(delzma(tblib_concat(temp[uid][1])))
+                merge(temp[uid][1], content)
+                bytes = temp[uid][1]
             end
 
             local path = temp[uid][2]
@@ -569,7 +574,6 @@ else
                 string.FormattedTime(tlapse, "%02i:%02i:%02i"), path,
                 user:SteamID64(), string.NiceSize(file_size(path, "DATA") / tlapse)))
 
-            --- Clears garbage
             temp[uid] = nil
 
             --- Removes completed task from queue
@@ -579,7 +583,7 @@ else
             netlib_wuintm(1)
             netlib_wuint64(uid)
         elseif frame_type == 201 then
-            temp[uid][1][#temp[uid][1] + 1] = content
+            merge(temp[uid][1], content)
 
             netlib_start("mdlstream_ack")
 
