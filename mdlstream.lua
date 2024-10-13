@@ -34,14 +34,14 @@ local flag_noclui  = false
 
 --- Shared konstants(not necessarily)
 -- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11000
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
 -- 3 for #content(slice / frame) length
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
--- 11000 spared for testing the most optimal size
+-- some bytes spared for testing the most optimal size
 
 local tonumber            = tonumber
 local isvalid             = IsValid
@@ -81,9 +81,9 @@ local mstr                = function(_s) return "MDLStream: " .. _s end
 local str_startswith      = function(_s, start) return str_sub(_s, 1, #start) == start end
 
 local file_open           = function(_f, _m, _p)
-                                local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 2) end
-                                return __f
-                            end
+    local __f = file.Open(_f, _m, _p) if not __f then error("file descriptor invalid", 2) end
+    return __f
+end
 
 if CLIENT then
     local lzma             = util.Compress
@@ -105,7 +105,6 @@ if CLIENT then
     -- FIXME: does server really need some of them?
     local file_formats     = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
 
-    -- TODO: implement method to compress sequence of bytes
     local function wbdata(_bt, _start, _end)
         local _size = #_bt
         if not _end then _end = _size end
@@ -170,18 +169,17 @@ if CLIENT then
         return true
     end
 
+    -- TODO: implement method to compress sequence of bytes
     local function bytes_table(_path)
-        local _file = file_open(_path, "rb", "GAME")
-
         local bytes = {}
+
+        local _file = file_open(_path, "rb", "GAME")
 
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
             bytes[i] = cfile_rbyte(_file)
         end
-
-        _file:Close()
 
         return bytes
     end
