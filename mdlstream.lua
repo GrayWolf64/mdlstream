@@ -43,6 +43,280 @@ local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
 -- 8 for uid(int64:str) of every accepted request, generated on client
 -- some bytes spared for testing the most optimal size
 
+--- For clientside compression of bt
+-- "~", "^" for extension of representable range
+-- TODO: re-arrange it on the fly and sync with sv to achieve minimum strlen
+local bs_codec={
+    [0] = "a",
+    [1] = "b",
+    [2] = "c",
+    [3] = "d",
+    [4] = "e",
+    [5] = "f",
+    [6] = "g",
+    [7] = "h",
+    [8] = "i",
+    [9] = "j",
+    [10] = "k",
+    [11] = "l",
+    [12] = "m",
+    [13] = "n",
+    [14] = "o",
+    [15] = "p",
+    [16] = "q",
+    [17] = "r",
+    [18] = "s",
+    [19] = "t",
+    [20] = "u",
+    [21] = "v",
+    [22] = "w",
+    [23] = "x",
+    [24] = "y",
+    [25] = "z",
+
+    [26] = "!",
+    [27] = "\"",
+    [28] = "#",
+    [29] = "$",
+    [30] = "%",
+    [31] = "&",
+    [32] = "'",
+    [33] = "(",
+    [34] = ")",
+    [35] = "*",
+    [36] = "+",
+    [37] = ",",
+    [38] = "-",
+    [39] = ".",
+    [40] = "/",
+    [41] = ":",
+    [42] = ";",
+    [43] = "<",
+    [44] = "=",
+    [45] = ">",
+    [46] = "?",
+    [47] = "@",
+    [48] = "[",
+    [49] = "\\",
+    [50] = "]",
+    [51] = "_",
+    [52] = "`",
+    [53] = "{",
+    [54] = "|",
+    [55] = "}",
+
+    [56] = "~a",
+    [57] = "~b",
+    [58] = "~c",
+    [59] = "~d",
+    [60] = "~e",
+    [61] = "~f",
+    [62] = "~g",
+    [63] = "~h",
+    [64] = "~i",
+    [65] = "~j",
+    [66] = "~k",
+    [67] = "~l",
+    [68] = "~m",
+    [69] = "~n",
+    [70] = "~o",
+    [71] = "~p",
+    [72] = "~q",
+    [73] = "~r",
+    [74] = "~s",
+    [75] = "~t",
+    [76] = "~u",
+    [77] = "~v",
+    [78] = "~w",
+    [79] = "~x",
+    [80] = "~y",
+    [81] = "~z",
+
+    [82] = "^a",
+    [83] = "^b",
+    [84] = "^c",
+    [85] = "^d",
+    [86] = "^e",
+    [87] = "^f",
+    [88] = "^g",
+    [89] = "^h",
+    [90] = "^i",
+    [91] = "^j",
+    [92] = "^k",
+    [93] = "^l",
+    [94] = "^m",
+    [95] = "^n",
+    [96] = "^o",
+    [97] = "^p",
+    [98] = "^q",
+    [99] = "^r",
+    [100] = "^s",
+    [101] = "^t",
+    [102] = "^u",
+    [103] = "^v",
+    [104] = "^w",
+    [105] = "^x",
+    [106] = "^y",
+    [107] = "^z",
+
+    [108] = "~!",
+    [109] = "~\"",
+    [110] = "~#",
+    [111] = "~$",
+    [112] = "~%",
+    [113] = "~&",
+    [114] = "~'",
+    [115] = "~(",
+    [116] = "~)",
+    [117] = "~*",
+    [118] = "~+",
+    [119] = "~,",
+    [120] = "~-",
+    [121] = "~.",
+    [122] = "~/",
+    [123] = "~:",
+    [124] = "~;",
+    [125] = "~?",
+    [126] = "~@",
+
+    [127] = "A",
+    [128] = "B",
+    [129] = "C",
+    [130] = "D",
+    [131] = "E",
+    [132] = "F",
+    [133] = "G",
+    [134] = "H",
+    [135] = "I",
+    [136] = "J",
+    [137] = "K",
+    [138] = "L",
+    [139] = "M",
+    [140] = "N",
+    [141] = "O",
+    [142] = "P",
+    [143] = "Q",
+    [144] = "R",
+    [145] = "S",
+    [146] = "T",
+    [147] = "U",
+    [148] = "V",
+    [149] = "W",
+    [150] = "X",
+    [151] = "Y",
+    [152] = "Z",
+
+    [153] = "~A",
+    [154] = "~B",
+    [155] = "~C",
+    [156] = "~D",
+    [157] = "~E",
+    [158] = "~F",
+    [159] = "~G",
+    [160] = "~H",
+    [161] = "~I",
+    [162] = "~J",
+    [163] = "~K",
+    [164] = "~L",
+    [165] = "~M",
+    [166] = "~N",
+    [167] = "~O",
+    [168] = "~P",
+    [169] = "~Q",
+    [170] = "~R",
+    [171] = "~S",
+    [172] = "~T",
+    [173] = "~U",
+    [174] = "~V",
+    [175] = "~W",
+    [176] = "~X",
+    [177] = "~Y",
+    [178] = "~Z",
+
+    [179] = "^A",
+    [180] = "^B",
+    [181] = "^C",
+    [182] = "^D",
+    [183] = "^E",
+    [184] = "^F",
+    [185] = "^G",
+    [186] = "^H",
+    [187] = "^I",
+    [188] = "^J",
+    [189] = "^K",
+    [190] = "^L",
+    [191] = "^M",
+    [192] = "^N",
+    [193] = "^O",
+    [194] = "^P",
+    [195] = "^Q",
+    [196] = "^R",
+    [197] = "^S",
+    [198] = "^T",
+    [199] = "^U",
+    [200] = "^V",
+    [201] = "^W",
+    [202] = "^X",
+    [203] = "^Y",
+    [204] = "^Z",
+
+    [205] = "^!",
+    [206] = "^\"",
+    [207] = "^#",
+    [208] = "^$",
+    [209] = "^%",
+    [210] = "^&",
+    [211] = "^'",
+    [212] = "^(",
+    [213] = "^)",
+    [214] = "^*",
+    [215] = "^+",
+    [216] = "^,",
+    [217] = "^-",
+    [218] = "^.",
+    [219] = "^/",
+    [220] = "^:",
+    [221] = "^;",
+    [222] = "^?",
+    [223] = "^@",
+
+    [224] = "~1",
+    [225] = "~2",
+    [226] = "~3",
+    [227] = "~4",
+    [228] = "~5",
+    [229] = "~6",
+    [230] = "~7",
+    [231] = "~8",
+    [232] = "~9",
+    [233] = "~0",
+
+    [234] = "^1",
+    [235] = "^2",
+    [236] = "^3",
+    [237] = "^4",
+    [238] = "^5",
+    [239] = "^6",
+    [240] = "^7",
+    [241] = "^8",
+    [242] = "^9",
+    [243] = "^0",
+
+    [244] = "^>",
+    [245] = "^<",
+
+    [246] = "1",
+    [247] = "2",
+    [248] = "3",
+    [249] = "4",
+    [250] = "5",
+    [251] = "6",
+    [252] = "7",
+    [253] = "8",
+    [254] = "9",
+    [255] = "0"
+}
+
 local tonumber            = tonumber
 local isvalid             = IsValid
 
@@ -91,6 +365,14 @@ if CLIENT then
     local netlib_wstring   = net.WriteString
     local netlib_toserver  = net.SendToServer
 
+    local function netlib_wbdata(_bs, _start, _end)
+        local _size = #_bs
+        if not _end then _end = _size end
+        size = _end - _start + 1
+        netlib_wuint(size)
+        net.WriteData(str_sub(_bs, _start, _end), size)
+    end
+
     local cfile_eof        = FindMetaTable("File").EndOfFile
     local cfile_rbyte      = FindMetaTable("File").ReadByte
 
@@ -102,16 +384,8 @@ if CLIENT then
 
     local max_file_size    = 8750000
 
-    -- FIXME: does server really need some of them?
+    -- TODO: does server really need some of them?
     local file_formats     = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
-
-    local function wbdata(_bt, _start, _end)
-        local _size = #_bt
-        if not _end then _end = _size end
-
-        netlib_wuint(_end - _start + 1)
-        for i = _start, _end do netlib_wuintm(_bt[i]) end
-    end
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
 
@@ -169,19 +443,18 @@ if CLIENT then
         return true
     end
 
-    -- TODO: implement method to compress sequence of bytes
-    local function bytes_table(_path)
-        local bytes = {}
+    local function bchars_table(_path)
+        local chars = {}
 
         local _file = file_open(_path, "rb", "GAME")
 
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
-            bytes[i] = cfile_rbyte(_file)
+            chars[i] = bs_codec[cfile_rbyte(_file)]
         end
 
-        return bytes
+        return chars
     end
 
     local ctemp = ctemp or {}
@@ -203,7 +476,7 @@ if CLIENT then
 
         local uid = uidgen()
 
-        ctemp[uid] = {[1] = bytes_table(path), [2] = path, [3] = callback}
+        ctemp[uid] = {[1] = lzma(tblib_concat(bchars_table(path))), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
@@ -256,32 +529,32 @@ if CLIENT then
 
         adjust_max_msg_size()
 
-        local _bt = ctemp[uid][1]
+        local _bs = ctemp[uid][1]
 
         --- May better simplify section below
         local exceeds_max, pos
         if _mode == 100 then
-            exceeds_max = #_bt > realmax_msg_size
+            exceeds_max = #_bs > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                wbdata(_bt, 1)
+                netlib_wbdata(_bs, 1, nil)
             else
-                wbdata(_bt, 1, realmax_msg_size)
+                netlib_wbdata(_bs, 1, realmax_msg_size)
                 netlib_wuint(realmax_msg_size)
             end
         elseif _mode == 101 then
             pos         = netlib_ruint()
-            exceeds_max = #_bt - pos > realmax_msg_size
+            exceeds_max = #_bs - pos > realmax_msg_size
 
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                wbdata(_bt, pos + 1, nil)
+                netlib_wbdata(_bs, pos + 1, nil)
             else
                 local _endpos = pos + realmax_msg_size
 
-                wbdata(_bt, pos + 1, _endpos)
+                netlib_wbdata(_bs, pos + 1, _endpos)
                 netlib_wuint(_endpos)
             end
         end
@@ -294,7 +567,7 @@ if CLIENT then
             if _mode == 100 then
                 stdout_append("starting frame sent: " .. filename)
             elseif _mode == 101 then
-                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bt) * 100)))
+                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)))
             end
         else
             if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename) end
@@ -390,11 +663,13 @@ if CLIENT then
 else
     local delzma         = util.Decompress
     local str_find       = string.find
+    local str_gmatch     = string.gmatch
     local tblib_sort     = table.sort
 
     local netlib_send    = net.Send
     local netlib_rstring = net.ReadString
     local netlib_rdata   = net.ReadData
+    local netlib_rbdata  = function() return net.ReadData(netlib_ruint()) end
 
     local systime        = SysTime
 
@@ -403,17 +678,6 @@ else
     util.AddNetworkString"mdlstream_req"
     util.AddNetworkString"mdlstream_frm" -- or Slice
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
-
-    local function rbdata()
-        local bytes = {}
-        local _size = netlib_ruint()
-
-        for i = 1, _size do
-            bytes[i] = netlib_ruintm()
-        end
-
-        return bytes
-    end
 
     --- I don't want to go oop here, though it may be more elegant
     local temp = temp or {}
@@ -527,27 +791,35 @@ else
         _f:Close()
     end
 
-    local function merge(dest, src)
-        local _size = #dest
-        for i = 1, #src do
-            dest[_size + i] = src[i]
+    --- Serverside decompression
+    bs_codec = table.Flip(bs_codec)
+
+    -- TODO: make the pattern more precise
+    local function ctb(_s)
+        local _bytes = {}
+
+        for token in str_gmatch(_s, "([%~%^]?[^%~%^%s%c])") do
+            _bytes[#_bytes + 1] = bs_codec[token]
         end
+
+        return _bytes
     end
 
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
         local frame_type = netlib_ruintm()
-        local content    = rbdata()
+        local content    = netlib_rbdata()
 
         if frame_type == 200 then
             local bytes
 
             if #temp[uid][1] == 0 then
-                bytes = content
+                bytes = ctb(delzma(content))
             else
-                merge(temp[uid][1], content)
-                bytes = temp[uid][1]
+                temp[uid][1][#temp[uid][1] + 1] = content
+
+                bytes = ctb(delzma(tblib_concat(temp[uid][1])))
             end
 
             local path = temp[uid][2]
@@ -581,7 +853,7 @@ else
             netlib_wuintm(1)
             netlib_wuint64(uid)
         elseif frame_type == 201 then
-            merge(temp[uid][1], content)
+            temp[uid][1][#temp[uid][1] + 1] = content
 
             netlib_start("mdlstream_ack")
 
