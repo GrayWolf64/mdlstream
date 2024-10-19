@@ -1,6 +1,6 @@
 --- MDLStream
 -- Sync necessary files of client models to server so that server can initialize models' physics
--- For use with cloud asset related addons
+-- For use with addons which require clientside model files to be sent to server
 --
 -- Specifications:
 -- Max file size: 8.75 MB
@@ -28,13 +28,14 @@ mdlstream = {}
 --* Switches
 --
 -- `flag_testing`: Disables file existence check serverside
--- `flag_noclui`:  Disables clientside debugger GUI; Directs some terminal(debugger ui) messages to engine console
+-- `flag_noclui`:  Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
 local flag_testing = true
 local flag_noclui  = false
 
 --- Shared konstants(not necessarily)
--- !Without extra indication, all the numbers related to msg sizes are all in 'bytes'
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
+-- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
+--
+-- FRAME content:
 -- 3 spared for engine use
 -- 1 for determining the response mode
 -- #content for the actual partial(sliced) compressed string of byte sequence of target file
@@ -42,84 +43,64 @@ local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
 -- some bytes spared for testing the most optimal size
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
 
 --- For clientside compression of bt
 -- "~", "^" for extension of representable range
--- TODO: re-arrange it on the fly and sync with sv to achieve minimum strlen
-local bs_codec={
-    -- a - z
-    [0]  = "a", [1]  = "b", [2]  = "c", [3]  = "d", [4]  = "e", [5]  = "f", [6]  = "g",
-    [7]  = "h", [8]  = "i", [9]  = "j", [10] = "k", [11] = "l", [12] = "m", [13] = "n",
-    [14] = "o", [15] = "p", [16] = "q", [17] = "r", [18] = "s", [19] = "t", [20] = "u",
-    [21] = "v", [22] = "w", [23] = "x", [24] = "y", [25] = "z",
+local bs_codec = {
+    [1]  = "a", [2]  = "b", [3]  = "c", [4]  = "d", [5]  = "e", [6]  = "f", [7]  = "g", [8]  = "h",
+    [9]  = "i", [10] = "j", [11] = "k", [12] = "l", [13] = "m", [14] = "n", [15] = "o", [16] = "p",
+    [17] = "q", [18] = "r", [19] = "s", [20] = "t", [21] = "u", [22] = "v", [23] = "w", [24] = "x",
+    [25] = "y", [26] = "z",
 
-    -- ! - @
-    [26] = "!", [27] = "\"", [28] = "#", [29] = "$", [30] = "%", [31] = "&", [32] = "'",
-    [33] = "(", [34] = ")",  [35] = "*", [36] = "+", [37] = ",", [38] = "-", [39] = ".",
-    [40] = "/", [41] = ":",  [42] = ";", [43] = "<", [44] = "=", [45] = ">", [46] = "?",
-    [47] = "@", [48] = "[",  [49] = "\\",[50] = "]", [51] = "_", [52] = "`", [53] = "{",
-    [54] = "|", [55] = "}",
+    [27] = "A", [28] = "B", [29] = "C", [30] = "D", [31] = "E", [32] = "F", [33] = "G", [34] = "H",
+    [35] = "I", [36] = "J", [37] = "K", [38] = "L", [39] = "M", [40] = "N", [41] = "O", [42] = "P",
+    [43] = "Q", [44] = "R", [45] = "S", [46] = "T", [47] = "U", [48] = "V", [49] = "W", [50] = "X",
+    [51] = "Y", [52] = "Z",
 
-    -- ~a - ~z
-    [56] = "~a", [57] = "~b", [58] = "~c", [59] = "~d", [60] = "~e", [61] = "~f",
-    [62] = "~g", [63] = "~h", [64] = "~i", [65] = "~j", [66] = "~k", [67] = "~l",
-    [68] = "~m", [69] = "~n", [70] = "~o", [71] = "~p", [72] = "~q", [73] = "~r",
-    [74] = "~s", [75] = "~t", [76] = "~u", [77] = "~v", [78] = "~w", [79] = "~x",
-    [80] = "~y", [81] = "~z",
+    [53] = "0", [54] = "1", [55] = "2", [56] = "3", [57] = "4",
+    [58] = "5", [59] = "6", [60] = "7", [61] = "8", [62] = "9",
 
-    -- ^a - ^z
-    [82]  = "^a", [83]  = "^b", [84]  = "^c", [85]  = "^d", [86]  = "^e", [87]  = "^f",
-    [88]  = "^g", [89]  = "^h", [90]  = "^i", [91]  = "^j", [92]  = "^k", [93]  = "^l",
-    [94]  = "^m", [95]  = "^n", [96]  = "^o", [97]  = "^p", [98]  = "^q", [99]  = "^r",
-    [100] = "^s", [101] = "^t", [102] = "^u", [103] = "^v", [104] = "^w", [105] = "^x",
-    [106] = "^y", [107] = "^z",
+    [63] = "!", [64] = "\"", [65] = "#", [66] = "$", [67] = "%", [68] = "&", [69] = "'", [70] = "(",
+    [71] = ")", [72] = "*",  [73] = "+", [74] = ",", [75] = "-", [76] = ".", [77] = "/", [78] = ":",
+    [79] = ";", [80] = "<",  [81] = "=", [82] = ">", [83] = "?", [84] = "@", [85] = "[", [86] = "\\",
+    [87] = "]", [88] = "_",  [89] = "`", [90] = "{", [91] = "|", [92] = "}",
 
-    -- ~! - ~@
-    [108] = "~!", [109] = "~\"", [110] = "~#", [111] = "~$", [112] = "~%", [113] = "~&",
-    [114] = "~'", [115] = "~(",  [116] = "~)", [117] = "~*", [118] = "~+", [119] = "~,",
-    [120] = "~-", [121] = "~.",  [122] = "~/", [123] = "~:", [124] = "~;", [125] = "~?",
-    [126] = "~@",
 
-    -- A - Z
-    [127] = "A", [128] = "B", [129] = "C", [130] = "D", [131] = "E", [132] = "F",
-    [133] = "G", [134] = "H", [135] = "I", [136] = "J", [137] = "K", [138] = "L",
-    [139] = "M", [140] = "N", [141] = "O", [142] = "P", [143] = "Q", [144] = "R",
-    [145] = "S", [146] = "T", [147] = "U", [148] = "V", [149] = "W", [150] = "X",
-    [151] = "Y", [152] = "Z",
+    [93]  = "~a", [94]  = "~b", [95]  = "~c", [96]  = "~d", [97]  = "~e", [98]  = "~f", [99]  = "~g",
+    [100] = "~h", [101] = "~i", [102] = "~j", [103] = "~k", [104] = "~l", [105] = "~m", [106] = "~n",
+    [107] = "~o", [108] = "~p", [109] = "~q", [110] = "~r", [111] = "~s", [112] = "~t", [113] = "~u",
+    [114] = "~v", [115] = "~w", [116] = "~x", [117] = "~y", [118] = "~z",
 
-    -- ~A - ~Z
-    [153] = "~A", [154] = "~B", [155] = "~C", [156] = "~D", [157] = "~E", [158] = "~F",
-    [159] = "~G", [160] = "~H", [161] = "~I", [162] = "~J", [163] = "~K", [164] = "~L",
-    [165] = "~M", [166] = "~N", [167] = "~O", [168] = "~P", [169] = "~Q", [170] = "~R",
-    [171] = "~S", [172] = "~T", [173] = "~U", [174] = "~V", [175] = "~W", [176] = "~X",
-    [177] = "~Y", [178] = "~Z",
+    [119] = "~A", [120] = "~B", [121] = "~C", [122] = "~D", [123] = "~E", [124] = "~F", [125] = "~G",
+    [126] = "~H", [127] = "~I", [128] = "~J", [129] = "~K", [130] = "~L", [131] = "~M", [132] = "~N",
+    [133] = "~O", [134] = "~P", [135] = "~Q", [136] = "~R", [137] = "~S", [138] = "~T", [139] = "~U",
+    [140] = "~V", [141] = "~W", [142] = "~X", [143] = "~Y", [144] = "~Z",
 
-    -- ^A - ^Z
-    [179] = "^A", [180] = "^B", [181] = "^C", [182] = "^D", [183] = "^E", [184] = "^F",
-    [185] = "^G", [186] = "^H", [187] = "^I", [188] = "^J", [189] = "^K", [190] = "^L",
-    [191] = "^M", [192] = "^N", [193] = "^O", [194] = "^P", [195] = "^Q", [196] = "^R",
-    [197] = "^S", [198] = "^T", [199] = "^U", [200] = "^V", [201] = "^W", [202] = "^X",
-    [203] = "^Y", [204] = "^Z",
+    [145] = "~0", [146] = "~1", [147] = "~2", [148] = "~3", [149] = "~4",
+    [150] = "~5", [151] = "~6", [152] = "~7", [153] = "~8", [154] = "~9",
 
-    -- ^! - ^@
-    [205] = "^!", [206] = "^\"", [207] = "^#", [208] = "^$", [209] = "^%", [210] = "^&",
-    [211] = "^'", [212] = "^(",  [213] = "^)", [214] = "^*", [215] = "^+", [216] = "^,",
-    [217] = "^-", [218] = "^.",  [219] = "^/", [220] = "^:", [221] = "^;", [222] = "^?",
-    [223] = "^@",
+    [155] = "~!", [156] = "~\"", [157] = "~#", [158] = "~$", [159] = "~%", [160] = "~&", [161] = "~'",
+    [162] = "~(", [163] = "~)",  [164] = "~*", [165] = "~+", [166] = "~,", [167] = "~-", [168] = "~.",
+    [169] = "~/", [170] = "~:",  [171] = "~;", [172] = "~<", [173] = "~=", [174] = "~>",
 
-    -- ~0 - ~9
-    [224] = "~1", [225] = "~2", [226] = "~3", [227] = "~4", [228] = "~5", [229] = "~6",
-    [230] = "~7", [231] = "~8", [232] = "~9", [233] = "~0",
 
-    -- ^0 - ^9
-    [234] = "^1", [235] = "^2", [236] = "^3", [237] = "^4", [238] = "^5", [239] = "^6",
-    [240] = "^7", [241] = "^8", [242] = "^9", [243] = "^0",
+    [175] = "^a", [176] = "^b", [177] = "^c", [178] = "^d", [179] = "^e", [180] = "^f", [181] = "^g",
+    [182] = "^h", [183] = "^i", [184] = "^j", [185] = "^k", [186] = "^l", [187] = "^m", [188] = "^n",
+    [189] = "^o", [190] = "^p", [191] = "^q", [192] = "^r", [193] = "^s", [194] = "^t", [195] = "^u",
+    [196] = "^v", [197] = "^w", [198] = "^x", [199] = "^y", [200] = "^z",
 
-    [244] = "^>", [245] = "^<",
+    [201] = "^A", [202] = "^B", [203] = "^C", [204] = "^D", [205] = "^E", [206] = "^F", [207] = "^G",
+    [208] = "^H", [209] = "^I", [210] = "^J", [211] = "^K", [212] = "^L", [213] = "^M", [214] = "^N",
+    [215] = "^O", [216] = "^P", [217] = "^Q", [218] = "^R", [219] = "^S", [220] = "^T", [221] = "^U",
+    [222] = "^V", [223] = "^W", [224] = "^X", [225] = "^Y", [226] = "^Z",
 
-    -- 0 - 9
-    [246] = "1", [247] = "2", [248] = "3", [249] = "4", [250] = "5", [251] = "6",
-    [252] = "7", [253] = "8", [254] = "9", [255] = "0"
+    [227] = "^0", [228] = "^1", [229] = "^2", [230] = "^3", [231] = "^4",
+    [232] = "^5", [233] = "^6", [234] = "^7", [235] = "^8", [236] = "^9",
+
+    [237] = "^!", [238] = "^\"", [239] = "^#", [240] = "^$", [241] = "^%", [242] = "^&", [243] = "^'",
+    [244] = "^(", [245] = "^)",  [246] = "^*", [247] = "^+", [248] = "^,", [249] = "^-", [250] = "^.",
+    [251] = "^/", [252] = "^:",  [253] = "^;", [254] = "^<", [255] = "^=", [256] = "^>"
 }
 
 local tonumber            = tonumber
@@ -152,6 +133,7 @@ local str_fmt             = string.format
 
 local tblib_concat        = table.concat
 local tblib_remove        = table.remove
+local tblib_sort          = table.sort
 
 local file_size           = file.Size
 
@@ -170,14 +152,6 @@ if CLIENT then
     local netlib_wstring   = net.WriteString
     local netlib_toserver  = net.SendToServer
 
-    local function netlib_wbdata(_bs, _start, _end)
-        local _size = #_bs
-        if not _end then _end = _size end
-        size = _end - _start + 1
-        netlib_wuint(size)
-        net.WriteData(str_sub(_bs, _start, _end), size)
-    end
-
     local cfile_eof        = FindMetaTable("File").EndOfFile
     local cfile_rbyte      = FindMetaTable("File").ReadByte
 
@@ -189,17 +163,36 @@ if CLIENT then
 
     local max_file_size    = 8750000
 
-    -- TODO: does server really need some of them?
     local file_formats     = {mdl = true, phy = true, vvd = true, ani = true, vtx = true}
+
+    local function netlib_wbdata(_bs, _start, _end)
+        local _size = #_bs
+        if not _end then _end = _size end
+        size = _end - _start + 1
+        netlib_wuint(size)
+        net.WriteData(str_sub(_bs, _start, _end), size)
+    end
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
 
     local function stdout_append(_s)
-        stdout:InsertColorChange(0, 205, 50, 255) stdout:AppendText(os.date("%H:%M:%S") .. " ")
-        stdout:InsertColorChange(0, 0, 0, 225)    stdout:AppendText(_s .. "\n")
-    end
+        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("[")
 
-    stdout_append("type some chars to reveal suggestions")
+        stdout:InsertColorChange(0, 197, 205, 255)
+        stdout:AppendText(Either(LocalPlayer():IsAdmin(), "admin", "user"))
+
+        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("@")
+
+        stdout:InsertColorChange(0, 205, 50, 250)
+        stdout:AppendText((game.GetIPAddress()):gsub("loopback", "localhost")) -- os.date("%H:%M:%S")
+
+        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("]")
+
+        stdout:AppendText(" ")
+
+        stdout:InsertColorChange(0, 0, 0, 225)
+        stdout:AppendText(_s .. "\n")
+    end
 
     local mdl_determinant = {
         id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
@@ -248,18 +241,56 @@ if CLIENT then
         return true
     end
 
-    local function bchars_table(_path)
-        local chars = {}
+    local function bytes_table(_path)
+        local bt = {}
 
         local _file = file_open(_path, "rb", "GAME")
 
         for i = 1, math.huge do
             if cfile_eof(_file) then break end
 
-            chars[i] = bs_codec[cfile_rbyte(_file)]
+            bt[i] = cfile_rbyte(_file)
         end
 
-        return chars
+        return bt
+    end
+
+    local function optimal_map(_bytes)
+        local freq = {}
+        for i = 0, 255 do freq[i] = 0 end
+
+        local byte
+        for i = 1, #_bytes do
+            byte = _bytes[i]
+            freq[byte] = freq[byte] + 1
+        end
+
+        local sortable = {}
+
+        for i = 0, 255 do
+            sortable[i + 1] = {[1] = i, [2] = freq[i]}
+        end
+
+        tblib_sort(sortable, function(e1, e2) return e1[2] > e2[2] end)
+
+        local map = {}
+        for i = 1, 256 do
+            map[sortable[i][1]] = bs_codec[i]
+        end
+
+        return map
+    end
+
+    local function encode(_map, _bt)
+        local chars = {}
+        local byte
+
+        for i = 1, #_bt do
+            byte = _bt[i]
+            chars[#chars + 1] = _map[byte]
+        end
+
+        return lzma(tblib_concat(chars))
     end
 
     local ctemp = ctemp or {}
@@ -281,12 +312,16 @@ if CLIENT then
 
         local uid = uidgen()
 
-        ctemp[uid] = {[1] = lzma(tblib_concat(bchars_table(path))), [2] = path, [3] = callback}
+        local bytes = bytes_table(path)
+        local map   = optimal_map(bytes)
+
+        ctemp[uid] = {[1] = encode(map, bytes), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
         netlib_wuint64(uid)
         netlib_wstring(tostring(size))
+        netlib_wbdata(lzma(util.TableToJSON(map)), 1)
         netlib_toserver()
     end
 
@@ -458,7 +493,7 @@ if CLIENT then
         end
 
         cmd.OnEnter = function(self, _s)
-            stdout_append("<< " .. _s)
+            stdout_append("< " .. _s)
             local match = false
             for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
             if not match then stdout_append("syntax error!") else self:AddHistory(_s) end
@@ -469,7 +504,6 @@ else
     local delzma         = util.Decompress
     local str_find       = string.find
     local str_gmatch     = string.gmatch
-    local tblib_sort     = table.sort
 
     local netlib_send    = net.Send
     local netlib_rstring = net.ReadString
@@ -495,6 +529,7 @@ else
         local _path = netlib_rstring()
         local uid   = netlib_ruint64()
         local size  = tonumber(netlib_rstring())
+        local map   = table.Flip(util.JSONToTable(delzma(netlib_rbdata())))
 
         if flag_testing then goto no_existence_chk end
 
@@ -514,7 +549,7 @@ else
 
             netlib_wuintm(100)
 
-            temp[uid] = {[1] = {}, [2] = _path, [3] = systime()}
+            temp[uid] = {[1] = {}, [2] = _path, [3] = systime(), [4] = map}
 
             netlib_wuint64(uid)
 
@@ -596,15 +631,11 @@ else
         _f:Close()
     end
 
-    --- Serverside decompression
-    bs_codec = table.Flip(bs_codec)
-
-    -- TODO: make the pattern more precise
-    local function ctb(_s)
+    local function ctb(_s, _map)
         local _bytes = {}
 
-        for token in str_gmatch(_s, "([%~%^]?[^%~%^%s%c])") do
-            _bytes[#_bytes + 1] = bs_codec[token]
+        for token in str_gmatch(_s, "([%~%^]?[^%~%^%s%c%z])") do
+            _bytes[#_bytes + 1] = _map[token]
         end
 
         return _bytes
@@ -620,11 +651,11 @@ else
             local bytes
 
             if #temp[uid][1] == 0 then
-                bytes = ctb(delzma(content))
+                bytes = ctb(delzma(content), temp[uid][4])
             else
                 temp[uid][1][#temp[uid][1] + 1] = content
 
-                bytes = ctb(delzma(tblib_concat(temp[uid][1])))
+                bytes = ctb(delzma(tblib_concat(temp[uid][1])), temp[uid][4])
             end
 
             local path = temp[uid][2]
