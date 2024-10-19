@@ -157,6 +157,8 @@ if CLIENT then
 
     local str_ext_fromfile = string.GetExtensionFromFilename
 
+    local util_t2json      = util.TableToJSON
+
     local fun_donothing    = function() end
 
     local realmax_msg_size = max_msg_size
@@ -321,7 +323,7 @@ if CLIENT then
         netlib_wstring(path)
         netlib_wuint64(uid)
         netlib_wstring(tostring(size))
-        netlib_wbdata(lzma(util.TableToJSON(map)), 1)
+        netlib_wbdata(lzma(util_t2json(map)), 1)
         netlib_toserver()
     end
 
@@ -337,7 +339,7 @@ if CLIENT then
         elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 5000
         elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 15000
         elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 27000
-        else                                   realmax_msg_size = 20000 end
+        else                                   realmax_msg_size = 18000 end
     end
 
     local function w_framemode(_exceeds) if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end end
@@ -512,6 +514,8 @@ else
 
     local systime        = SysTime
 
+    local util_json2t    = util.JSONToTable
+
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_req"
@@ -529,7 +533,7 @@ else
         local _path = netlib_rstring()
         local uid   = netlib_ruint64()
         local size  = tonumber(netlib_rstring())
-        local map   = table.Flip(util.JSONToTable(delzma(netlib_rbdata())))
+        local map   = table.Flip(util_json2t(delzma(netlib_rbdata())))
 
         if flag_testing then goto no_existence_chk end
 
