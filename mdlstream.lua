@@ -45,7 +45,7 @@ local flag_noclui  = false
 -- some bytes spared for testing the most optimal size
 local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
 
---- For clientside compression of bt
+--- All the codes to represent a byte
 -- "~", "^" for extension of representable range
 local bs_codec = {
     [1]  = "a", [2]  = "b", [3]  = "c", [4]  = "d", [5]  = "e", [6]  = "f", [7]  = "g", [8]  = "h",
@@ -307,8 +307,8 @@ if CLIENT then
 
         local size = file_size(path, "GAME")
 
-        assert(size <= max_file_size, mstr"Tries to send file larger than 8.75 MB, "       .. path)
-        assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), " .. path)
+        assert(size <= max_file_size, mstr"Tries to send file larger than 8.75 MB(8750000 bytes decimal), " .. path)
+        assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), "                  .. path)
 
         if not callback or not isfunction(callback) then callback = fun_donothing end
 
