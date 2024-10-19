@@ -487,9 +487,9 @@ if CLIENT then
         }
 
         cmd.GetAutoComplete = function(self, _s)
-            local sug = {}
-            for _c in pairs(cmds) do if str_startswith(_c, _s) then sug[#sug + 1] = _c end end
-            return sug
+            local _s = {}
+            for _c in pairs(cmds) do if str_startswith(_c, _s) then _s[#_s + 1] = _c end end
+            return _s
         end
 
         cmd.OnEnter = function(self, _s)
@@ -560,11 +560,11 @@ else
         queue[#queue + 1] = {[1] = action, [2] = false, [3] = user, [4] = size, [5] = uid}
     end)
 
-    do local front = nil
-        --- Sort based on ping and requested file size(factor weight: decreasing)
+    do local front, abs = nil, math.abs
+        --- Sort based on ping and requested file size
         local function cmp(e1, e2)
-            if e1[3]:Ping() ~= e2[3]:Ping() then return e1[3]:Ping() < e2[3]:Ping()
-            elseif    e1[4] ~= e2[4]        then return e1[4] < e2[4] end
+            if     abs(e1[3]:Ping() - e2[3]:Ping()) > 20 then return e1[3]:Ping() < e2[3]:Ping()
+            elseif e1[4] ~= e2[4]                        then return e1[4] < e2[4] end
         end
 
         --- Do we have any ran tasks in queue but not removed?(unfinished)
