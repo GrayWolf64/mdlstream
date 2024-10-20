@@ -29,8 +29,10 @@ mdlstream = {}
 --
 -- `flag_testing`: Disables file existence check serverside
 -- `flag_noclui`:  Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
+-- `flag_allperm`: Disables permission(admin) check when performing certain non-programmatic actions, like `request`
 local flag_testing = true
 local flag_noclui  = false
+local flag_allperm = true
 
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
@@ -493,8 +495,11 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
         -- TODO: use regex to parse
         local cmds = {
             request   = function(_s)
-                if LocalPlayer():IsAdmin() then send_request(str_sub(_s, 9, #_s))
-                else stdout_append("access violation: not admin", true) end
+                if LocalPlayer():IsAdmin() or flag_allperm then
+                    send_request(str_sub(_s, 9, #_s))
+                else
+                    stdout_append("access violation: not admin", true)
+                end
             end,
             showtemp  = function(_s)
                 if table.IsEmpty(ctemp) then stdout_append("ctemp empty", true) return end
