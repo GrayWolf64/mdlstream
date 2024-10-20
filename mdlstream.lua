@@ -299,14 +299,14 @@ if CLIENT then
         return lzma(tblib_concat(chars))
     end
 
-    local ctemp = ctemp or {}
-
     local function uidgen() return string.gsub(tostring(SysTime()), "%.", "", 1) end
+
+    local ctemp = ctemp or {}
 
     -- TODO: clientside postpone frame dispatch when ping too high/unstable, and a state machine serverside
     local function send_request(path, callback)
         assert(isstring(path),                       mstr"'path' is not a string")
-        assert(file.Exists(path, "GAME"),            mstr"desired filepath does not exist on client, " .. path)
+        assert(file.Exists(path, "GAME"),            mstr"Desired filepath does not exist on client, " .. path)
         assert(file_formats[str_ext_fromfile(path)], mstr"Tries to send unsupported file, "            .. path)
 
         local size = file_size(path, "GAME")
@@ -354,7 +354,7 @@ if CLIENT then
         local uid      = netlib_ruint64()
 
         if _mode == 0 then
-            stdout_append(str_fmt("request rejected(identically sized and named file already exists serverside: %s)", ctemp[uid][2]), true)
+            stdout_append(str_fmt("request rejected(identically sized & named file found: %s)", ctemp[uid][2]), true)
             ctemp[uid] = nil
 
             return
@@ -363,7 +363,6 @@ if CLIENT then
 
             stdout_append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)), true)
 
-            --- Clears garbage on client's delicate computer
             ctemp[uid] = nil
 
             return
