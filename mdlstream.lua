@@ -491,6 +491,7 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
             self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
         end
 
+        -- TODO: use regex to parse
         local cmds = {
             request   = function(_s)
                 if LocalPlayer():IsAdmin() then send_request(str_sub(_s, 9, #_s))
