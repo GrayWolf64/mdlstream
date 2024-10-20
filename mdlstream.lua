@@ -176,8 +176,11 @@ if CLIENT then
     end
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
+    stdout.PerformLayout = function(self) self:SetFontInternal("DebugFixed") end
 
-    local function stdout_append(_s)
+    local function stdout_append(_s, no_info)
+        if no_info then goto plain end
+
         stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("[")
 
         stdout:InsertColorChange(0, 197, 205, 255)
@@ -192,6 +195,7 @@ if CLIENT then
 
         stdout:AppendText(" ")
 
+        :: plain ::
         stdout:InsertColorChange(0, 0, 0, 225)
         stdout:AppendText(_s .. "\n")
     end
@@ -350,14 +354,14 @@ if CLIENT then
         local uid      = netlib_ruint64()
 
         if _mode == 0 then
-            stdout_append(str_fmt("request rejected(identically sized and named file already exists serverside: %s)", ctemp[uid][2]))
+            stdout_append(str_fmt("request rejected(identically sized and named file already exists serverside: %s)", ctemp[uid][2]), true)
             ctemp[uid] = nil
 
             return
         elseif _mode == 1 then
             local is_ok = pcall(ctemp[uid][3])
 
-            stdout_append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)))
+            stdout_append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)), true)
 
             --- Clears garbage on client's delicate computer
             ctemp[uid] = nil
@@ -407,12 +411,12 @@ if CLIENT then
 
         if exceeds_max then
             if _mode == 100 then
-                stdout_append("starting frame sent: " .. filename)
+                stdout_append("starting frame sent: " .. filename, true)
             elseif _mode == 101 then
-                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)))
+                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)), true)
             end
         else
-            if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename) end
+            if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename, true) end
         end
     end)
 
@@ -428,13 +432,25 @@ if CLIENT then
         return
     end
 
-    local surf_set_drawcolor     = surface.SetDrawColor
-    local surf_drawrect          = surface.DrawRect
-    local surf_drawrect_outline  = surface.DrawOutlinedRect
-    local surf_setmaterial       = surface.SetMaterial
-    local surf_drawrect_textured = surface.DrawTexturedRect
+local logo_ascii
+= [[
+#     # ######  #        #####
+##   ## #     # #       #     # ##### #####  ######   ##   #    #
+# # # # #     # #       #         #   #    # #       #  #  ##  ##
+#  #  # #     # #        #####    #   #    # #####  #    # # ## #
+#     # #     # #             #   #   #####  #      ###### #    #
+#     # #     # #       #     #   #   #   #  #      #    # #    #
+#     # ######  #######  #####    #   #    # ###### #    # #    #
+
+MDLStream (Simple) Debugger - Licensed under Apache License 2.0
+]]
+
+    local surf_set_drawcolor, surf_setmaterial, surf_drawrect, surf_drawrect_outline, surf_drawrect_textured
+    = surface.SetDrawColor, surface.SetMaterial, surface.DrawRect, surface.DrawOutlinedRect, surface.DrawTexturedRect
 
     concommand.Add("mdt", function()
+        if stdout:GetText() == "" then stdout_append(logo_ascii, true) end
+
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
         window:SetTitle("MDLStream Debugging Tool") window:MakePopup() window:SetDeleteOnClose(false)
@@ -478,27 +494,27 @@ if CLIENT then
         local cmds = {
             request   = function(_s)
                 if LocalPlayer():IsAdmin() then send_request(str_sub(_s, 9, #_s))
-                else stdout_append("access violation: not admin") end
+                else stdout_append("access violation: not admin", true) end
             end,
             showtemp  = function(_s)
-                if table.IsEmpty(ctemp) then stdout_append("ctemp empty") return end
-                for i, t in pairs(ctemp) do stdout_append(str_fmt("id = %i, path = %s", i, t[2])) end
+                if table.IsEmpty(ctemp) then stdout_append("ctemp empty", true) return end
+                for i, t in pairs(ctemp) do stdout_append(str_fmt("id = %i, path = %s", i, t[2]), true) end
             end,
-            myrealmax = function() stdout_append(realmax_msg_size) end,
-            clearcon  = function()   stdout:SetText("") end
+            myrealmax = function() stdout_append(realmax_msg_size, true) end,
+            clearcon  = function() stdout:SetText("") end
         }
 
-        cmd.GetAutoComplete = function(self, _s)
-            local _s = {}
-            for _c in pairs(cmds) do if str_startswith(_c, _s) then _s[#_s + 1] = _c end end
-            return _s
+        cmd.GetAutoComplete = function(_, _s)
+            local t = {}
+            for _c in pairs(cmds) do if str_startswith(_c, _s) then t[#t + 1] = _c end end
+            return t
         end
 
         cmd.OnEnter = function(self, _s)
             stdout_append("< " .. _s)
             local match = false
             for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
-            if not match then stdout_append("syntax error!") else self:AddHistory(_s) end
+            if not match then stdout_append("syntax error!", true) else self:AddHistory(_s) end
             self:SetText("")
         end
     end)
