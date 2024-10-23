@@ -435,13 +435,13 @@ if CLIENT then
 
 local logo_ascii
 = [[
-#     # ######  #        #####
-##   ## #     # #       #     # ##### #####  ######   ##   #    #
-# # # # #     # #       #         #   #    # #       #  #  ##  ##
-#  #  # #     # #        #####    #   #    # #####  #    # # ## #
-#     # #     # #             #   #   #####  #      ###### #    #
-#     # #     # #       #     #   #   #   #  #      #    # #    #
-#     # ######  #######  #####    #   #    # ###### #    # #    #
+M     M DDDDDD  L        SSSSS
+MM   MM D     D L       S     S TTTTT RRRRR  EEEEEE   AA   M    M
+M M M M D     D L       S         T   R    R E       A  A  MM  MM
+M  M  M D     D L        SSSSS    T   R    R EEEEE  A    A M MM M
+M     M D     D L             S   T   RRRRR  E      AAAAAA M    M
+M     M D     D L       S     S   T   R   R  E      A    A M    M
+M     M DDDDDD  LLLLLLL  SSSSS    T   R    R EEEEEE A    A M    M
 
 MDLStream (Simple) Debugger - Licensed under Apache License 2.0
 ]]
