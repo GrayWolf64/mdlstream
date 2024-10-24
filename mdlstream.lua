@@ -458,16 +458,6 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
 
         window.lblTitle:SetFont("BudgetLabel")
 
-        local title_push = 0
-        window.PerformLayout = function(self)
-            if (isvalid(self.imgIcon)) then self.imgIcon:SetPos(5, 5) self.imgIcon:SetSize(16, 16) title_push = 16 end
-
-            self.btnClose:SetPos(self:GetWide() - 24 - 4, 0)     self.btnClose:SetSize(24, 24)
-            self.btnMaxim:SetPos(self:GetWide() - 24 * 2 - 4, 0) self.btnMaxim:SetSize(24, 24)
-            self.btnMinim:SetPos(self:GetWide() - 24 * 3 - 4, 0) self.btnMinim:SetSize(24, 24)
-            self.lblTitle:SetPos(8 + title_push, 2)              self.lblTitle:SetSize(self:GetWide() - 25 - title_push, 20)
-        end
-
         local grad_mat = Material("gui/gradient")
         window.Paint = function(_, w, h)
             surf_set_drawcolor(240, 240, 240)    surf_drawrect(0, 0, w, h)
