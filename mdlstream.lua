@@ -30,9 +30,11 @@ mdlstream = {}
 -- `flag_testing`: Disables file existence check serverside
 -- `flag_noclui`:  Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
 -- `flag_allperm`: Disables permission(admin) check when performing certain non-programmatic actions, like `request`
+-- `flag_keepobj`: True to keep original downloaded file, false to only keep encapsulated .gma
 local flag_testing = true
 local flag_noclui  = false
 local flag_allperm = true
+local flag_keepobj = false
 
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
@@ -679,6 +681,8 @@ else
             _file:Close()
 
             wgma(path, file.Read(path, "DATA"), uid)
+
+            if not flag_keepobj then file.Delete(path, "DATA") end
 
             local tlapse = systime() - temp[uid][3]
 
