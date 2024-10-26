@@ -207,8 +207,6 @@ if CLIENT then
         versions = {
             --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
             -- 14 is used in "Half-Life SDK", too old that is out of scope of this project
-            -- [4] = true, [6]  = true,
-            -- [10] = true, [14]   = true,
             [2531] = true, [27] = true, [28] = true, [29] = true,
             [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
             [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
@@ -259,6 +257,8 @@ if CLIENT then
 
             bt[i] = cfile_rbyte(_file)
         end
+
+        _file:Close()
 
         return bt
     end
