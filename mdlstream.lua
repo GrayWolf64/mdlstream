@@ -47,7 +47,7 @@ local flag_keepobj = false
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
 -- some bytes spared for testing the most optimal size
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10000
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11518
 
 --- All the codes to represent a byte
 -- "~", "^" for extension of representable range
@@ -337,10 +337,10 @@ if CLIENT then
         local ping = LocalPlayer():Ping()
 
         if     ping <= 30                 then realmax_msg_size = max_msg_size
-        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 5000
-        elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 15000
-        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 27000
-        else                                   realmax_msg_size = 18000 end
+        elseif ping >= 31  and ping < 50  then realmax_msg_size = max_msg_size - 6000
+        elseif ping >= 51  and ping < 100 then realmax_msg_size = max_msg_size - 16000
+        elseif ping >= 101 and ping < 200 then realmax_msg_size = max_msg_size - 28000
+        else                                   realmax_msg_size = 14000 end
     end
 
     local function w_framemode(_exceeds) if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end end
@@ -688,7 +688,7 @@ else
 
             print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
                 string.FormattedTime(tlapse, "%02i:%02i:%02i"), path,
-                user:SteamID64(), string.NiceSize(file_size(path, "DATA") / tlapse)))
+                user:SteamID64(), string.NiceSize(file_size(path .. Either(flag_keepobj, "", ".gma"), "DATA") / tlapse)))
 
             temp[uid] = nil
 
