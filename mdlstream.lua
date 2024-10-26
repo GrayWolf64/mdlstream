@@ -179,27 +179,19 @@ if CLIENT then
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
     stdout.PerformLayout = function(self) self:SetFontInternal("DebugFixed") end
-
-    local function stdout_append(_s, no_info)
+    stdout.change_color = function(self, r, g, b, a) self:InsertColorChange(r, g, b, a) return self end
+    stdout.append = function(self, _s, no_info)
         if no_info then goto plain end
 
-        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("[")
-
-        stdout:InsertColorChange(0, 197, 205, 255)
-        stdout:AppendText(Either(LocalPlayer():IsAdmin(), "admin", "user"))
-
-        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("@")
-
-        stdout:InsertColorChange(0, 205, 50, 250)
-        stdout:AppendText((game.GetIPAddress()):gsub("loopback", "localhost")) -- os.date("%H:%M:%S")
-
-        stdout:InsertColorChange(0, 0, 0, 230) stdout:AppendText("]")
-
-        stdout:AppendText(" ")
+        self:change_color(0,   0,   0, 230):AppendText("[")
+        self:change_color(0, 197, 205, 255):AppendText(Either(LocalPlayer():IsAdmin(), "admin", "user"))
+        self:change_color(0,   0,   0, 230):AppendText("@")
+        self:change_color(0, 205,  50, 250):AppendText((game.GetIPAddress()):gsub("loopback", "localhost"))
+        self:change_color(0,   0,   0, 230):AppendText("]")
+        self:AppendText(" ")
 
         :: plain ::
-        stdout:InsertColorChange(0, 0, 0, 225)
-        stdout:AppendText(_s .. "\n")
+        self:change_color(0, 0, 0, 225):AppendText(_s .. "\n")
     end
 
     local mdl_determinant = {
@@ -356,14 +348,14 @@ if CLIENT then
         local uid      = netlib_ruint64()
 
         if _mode == 0 then
-            stdout_append(str_fmt("request rejected(identically sized & named file found: %s)", ctemp[uid][2]), true)
+            stdout:append(str_fmt("request rejected(identically sized & named file found: %s)", ctemp[uid][2]), true)
             ctemp[uid] = nil
 
             return
         elseif _mode == 1 then
             local is_ok = pcall(ctemp[uid][3])
 
-            stdout_append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)), true)
+            stdout:append(str_fmt("request finished: %s, callback is_ok = %s", ctemp[uid][2], tostring(is_ok)), true)
 
             ctemp[uid] = nil
 
@@ -412,12 +404,12 @@ if CLIENT then
 
         if exceeds_max then
             if _mode == 100 then
-                stdout_append("starting frame sent: " .. filename, true)
+                stdout:append("starting frame sent: " .. filename, true)
             elseif _mode == 101 then
-                stdout_append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)), true)
+                stdout:append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)), true)
             end
         else
-            if _mode == 100 or _mode == 101 then stdout_append("last frame sent: " .. filename, true) end
+            if _mode == 100 or _mode == 101 then stdout:append("last frame sent: " .. filename, true) end
         end
     end)
 
@@ -427,7 +419,7 @@ if CLIENT then
     --* Debugger part
     --
     if flag_noclui then
-        stdout_append = function(_s) print(mstr(_s)) end
+        stdout.append = function(_s) print(mstr(_s)) end
         stdout:Remove()
 
         return
@@ -450,7 +442,7 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
     = surface.SetDrawColor, surface.SetMaterial, surface.DrawRect, surface.DrawOutlinedRect, surface.DrawTexturedRect
 
     concommand.Add("mdt", function()
-        if stdout:GetText() == "" then stdout_append(logo_ascii, true) end
+        if stdout:GetText() == "" then stdout:append(logo_ascii, true) end
 
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
@@ -488,14 +480,14 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
                 if LocalPlayer():IsAdmin() or flag_allperm then
                     send_request(str_sub(_s, 9, #_s))
                 else
-                    stdout_append("access violation: not admin", true)
+                    stdout:append("access violation: not admin", true)
                 end
             end,
             showtemp  = function(_s)
-                if table.IsEmpty(ctemp) then stdout_append("ctemp empty", true) return end
-                for i, t in pairs(ctemp) do stdout_append(str_fmt("id = %i, path = %s", i, t[2]), true) end
+                if table.IsEmpty(ctemp) then stdout:append("ctemp empty", true) return end
+                for i, t in pairs(ctemp) do stdout:append(str_fmt("id = %i, path = %s", i, t[2]), true) end
             end,
-            myrealmax = function() stdout_append(realmax_msg_size, true) end,
+            myrealmax = function() stdout:append(realmax_msg_size, true) end,
             clearcon  = function() stdout:SetText("") end
         }
 
@@ -506,10 +498,10 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
         end
 
         cmd.OnEnter = function(self, _s)
-            stdout_append("< " .. _s)
+            stdout:append("< " .. _s)
             local match = false
             for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
-            if not match then stdout_append("syntax error!", true) else self:AddHistory(_s) end
+            if not match then stdout:append("syntax error!", true) else self:AddHistory(_s) end
             self:SetText("")
         end
     end)
