@@ -107,6 +107,7 @@ local bs_codec = {
 
 local tonumber            = tonumber
 local isvalid             = IsValid
+local systime             = SysTime
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -198,7 +199,7 @@ if CLIENT then
         id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
         versions = {
             --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
-            -- 14 is used in "Half-Life SDK", too old that is out of scope of this project
+            -- 14 is used in "Half-Life SDK", too old
             [2531] = true, [27] = true, [28] = true, [29] = true,
             [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
             [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
@@ -207,13 +208,13 @@ if CLIENT then
     }
 
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
+    -- Currently, only mdl's header check is implemented
     local function validate_header(_path)
         local _file = file_open(_path, "rb", "GAME")
 
         if _file:Read(2) == "MZ" then return false end
         _file:Skip(-2)
 
-        --- Currently, only mdl's header check is implemented
         if str_ext_fromfile(_path) ~= "mdl" then return true end
 
         local function read_cint() return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
@@ -293,7 +294,7 @@ if CLIENT then
         return lzma(tblib_concat(chars))
     end
 
-    local function uidgen() return string.gsub(tostring(SysTime()), "%.", "", 1) end
+    local function uidgen() return string.gsub(tostring(systime()), "%.", "", 1) end
 
     local ctemp = ctemp or {}
 
@@ -514,8 +515,6 @@ else
     local netlib_rstring = net.ReadString
     local netlib_rdata   = net.ReadData
     local netlib_rbdata  = function() return net.ReadData(netlib_ruint()) end
-
-    local systime        = SysTime
 
     local util_json2t    = util.JSONToTable
 
