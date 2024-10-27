@@ -318,6 +318,12 @@ if CLIENT then
         local bytes = bytes_table(path)
         local map   = optimal_map(bytes)
 
+        --- FIXME: actual size reduction needed
+        -- e.g. alyx.mdl #
+        -- file.Read + lzma:                                 292884, should just use this?
+        -- file.ReadByte + bytes_table + optimal_map + lzma: 340967 (now using)
+        -- file.ReadByte + bytes_table + bs_codec + lzma:    334957, shorter than optimal???
+
         ctemp[uid] = {[1] = encode(map, bytes), [2] = path, [3] = callback}
 
         netlib_start("mdlstream_req")
