@@ -202,15 +202,179 @@ if CLIENT then
         versions = {
             --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
             -- 14 is used in "Half-Life SDK", too old
-            [2531] = true, [27] = true, [28] = true, [29] = true,
+            -- [2531] = true, [27] = true, [28] = true, [29] = true,
             [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
             [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
             [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
         }
     }
 
+    local function read_cint(_file) return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
+    local function read_cvec(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
+
+
+    -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/public/studio.h#L2062-L2340
+    -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp#L2753-#L3123
+    -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/mdlinfo/main.cpp
+    -- https://github.com/gkjohnson/source-engine-model-loader/blob/master/src/MDLLoader.js
+    local function rhdr_mdl(_path)
+        local _file = file_open(_path, "rb", "GAME")
+
+        local _h = {}
+
+        _h.id       = _file:ReadLong()
+        _h.version  = _file:ReadLong()
+        _h.checksum = _file:ReadLong()
+        _h.name     = _file:Read(64)
+        _h.length   = _file:ReadLong()
+
+        _h.eyeposition   = read_cvec(_file)
+        _h.illumposition = read_cvec(_file)
+
+        _h.hull_min = read_cvec(_file)
+        _h.hull_max = read_cvec(_file)
+
+        _h.view_bbmin = read_cvec(_file)
+        _h.view_bbmax = read_cvec(_file)
+
+        _h.flags = _file:ReadLong()
+
+        _h.numbones  = _file:ReadLong()
+        _h.boneindex = _file:ReadLong()
+
+        _h.numbonecontrollers  = _file:ReadLong()
+        _h.bonecontrollerindex = _file:ReadLong()
+
+        _h.numhitboxsets  = _file:ReadLong()
+        _h.hitboxsetindex = _file:ReadLong()
+
+        _h.numlocalanim   = _file:ReadLong()
+        _h.localanimindex = _file:ReadLong()
+
+        _h.numlocalseq   = _file:ReadLong()
+        _h.localseqindex = _file:ReadLong()
+
+        _h.activitylistversion = _file:ReadLong()
+        _h.eventsindexed       = _file:ReadLong()
+
+        _h.numtextures  = _file:ReadLong()
+        _h.textureindex = _file:ReadLong()
+
+        _h.numcdtextures  = _file:ReadLong()
+        _h.cdtextureindex = _file:ReadLong()
+
+        _h.numskinref      = _file:ReadLong()
+        _h.numskinfamilies = _file:ReadLong()
+        _h.skinindex       = _file:ReadLong()
+
+        _h.numbodyparts  = _file:ReadLong()
+        _h.bodypartindex = _file:ReadLong()
+
+        _h.numlocalattachments  = _file:ReadLong()
+        _h.localattachmentindex = _file:ReadLong()
+
+        _h.numlocalnodes      = _file:ReadLong()
+        _h.localnodeindex     = _file:ReadLong()
+        _h.localnodenameindex = _file:ReadLong()
+
+        _h.numflexdesc   = _file:ReadLong()
+        _h.flexdescindex = _file:ReadLong()
+
+        _h.numflexcontrollers  = _file:ReadLong()
+        _h.flexcontrollerindex = _file:ReadLong()
+
+        _h.numflexrules  = _file:ReadLong()
+        _h.flexruleindex = _file:ReadLong()
+
+        _h.numikchains  = _file:ReadLong()
+        _h.ikchainindex = _file:ReadLong()
+
+        _h.nummouths  = _file:ReadLong()
+        _h.mouthindex = _file:ReadLong()
+
+        _h.numlocalposeparameters = _file:ReadLong()
+        _h.localposeparamindex    = _file:ReadLong()
+
+        _h.surfacepropindex = _file:ReadLong()
+
+        _h.keyvalueindex = _file:ReadLong()
+        _h.keyvaluesize  = _file:ReadLong()
+
+        _h.numlocalikautoplaylocks  = _file:ReadLong()
+        _h.localikautoplaylockindex = _file:ReadLong()
+
+        _h.mass = _file:ReadFloat()
+
+        _h.contents = _file:ReadLong()
+
+        _h.numincludemodels  = _file:ReadLong()
+        _h.includemodelindex = _file:ReadLong()
+
+        _h.virtualmodel = _file:ReadLong()
+
+        _h.szanimblocknameindex = _file:ReadLong()
+        _h.numanimblocks        = _file:ReadLong()
+        _h.animblockindex       = _file:ReadLong()
+        _h.animblockModel       = _file:ReadLong()
+
+        _h.bonetablebynameindex = _file:ReadLong()
+
+        _h.pVertexBase = _file:ReadLong()
+        _h.pIndexBase  = _file:ReadLong()
+
+        _h.constdirectionallightdot = _file:ReadByte()
+        _h.rootLOD                  = _file:ReadByte()
+        _h.numAllowedRootLODs       = _file:ReadByte()
+
+        _h.unused0 = _file:ReadByte()
+        _h.unused1 = _file:ReadLong()
+
+        _h.numflexcontrolleruic  = _file:ReadLong()
+        _h.flexcontrolleruiindex = _file:ReadLong()
+
+        _h.flVertAnimFixedPointScale = _file:ReadFloat()
+
+        _h.unused2 = _file:ReadLong()
+
+        _h.studiohdr2index = _file:ReadLong()
+
+        _h.unused3 = _file:ReadLong()
+
+        _file:Close()
+
+        return _h, _file:Tell() -- should be 408
+    end
+
+    local function rhdr2_mdl(_path, offset)
+        local _file = file_open(_path, "rb", "GAME")
+
+        local _h2 = {}
+
+        _file:Seek(offset)
+
+        _h2.srcbonetransform_count = _file:ReadLong()
+        _h2.srcbonetransform_index = _file:ReadLong()
+
+        _h2.illumpositionattachmentindex = _file:ReadLong()
+
+        _h2.flMaxEyeDeflection = _file:ReadFloat()
+
+        _h2.linearbone_index = _file:ReadLong()
+
+        _h2.unknown = {}
+        for i = 1, 64 do _h2.unknown[i] = _file:ReadLong() end
+
+        _file:Close()
+
+        return _h2
+    end
+
+    PrintTable(rhdr_mdl("models/dog.mdl"))print()
+    PrintTable(rhdr2_mdl("models/dog.mdl", 408))
+
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
     -- Currently, only mdl's header check is implemented
+    -- TODO: rewrite below func
     local function validate_header(_path)
         local _file = file_open(_path, "rb", "GAME")
 
@@ -218,8 +382,6 @@ if CLIENT then
         _file:Skip(-2)
 
         if str_ext_fromfile(_path) ~= "mdl" then return true end
-
-        local function read_cint() return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
 
         local function hext_to_int(_t) return tonumber(str_fmt("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1])) end
 
@@ -293,7 +455,10 @@ if CLIENT then
             chars[#chars + 1] = _map[byte]
         end
 
-        return lzma(tblib_concat(chars))
+        local res = lzma(tblib_concat(chars))
+        if flag_testing then stdout:append(str_fmt("encoded len: %i", #res), true) end
+
+        return res
     end
 
     local function uidgen() return string.gsub(tostring(systime()), "%.", "", 1) end
