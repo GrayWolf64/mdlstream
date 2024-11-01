@@ -203,15 +203,32 @@ if CLIENT then
             --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
             -- 14 is used in "Half-Life SDK", too old
             -- [2531] = true, [27] = true, [28] = true, [29] = true,
-            [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
+            -- [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
             [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
             [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
         }
     }
 
+    local STUDIO_PROC_TYPE = {
+        STUDIO_PROC_AXISINTERP = 1,
+        STUDIO_PROC_QUATINTERP = 2,
+        STUDIO_PROC_AIMATBONE = 3,
+        STUDIO_PROC_AIMATATTACH = 4,
+        STUDIO_PROC_JIGGLE = 5
+    }
+
     local function read_cint(_file) return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
     local function read_cvec(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
-
+    local function read_cquat(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
+    local function read_str_nullend(_file)
+        local char = _file:Read(1)
+        local _s = {}
+        while char ~= "\0" do
+            _s[#_s + 1] = char
+            char = _file:Read(1)
+        end
+        return tblib_concat(_s)
+    end
 
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/public/studio.h#L2062-L2340
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp#L2753-#L3123
@@ -340,37 +357,199 @@ if CLIENT then
 
         _h.unused3 = _file:ReadLong()
 
+        local _h2
+        if _h.studiohdr2index > 0 then
+            _h2 = {}
+
+            _h2.srcbonetransform_count = _file:ReadLong()
+            _h2.srcbonetransform_index = _file:ReadLong()
+
+            _h2.illumpositionattachmentindex = _file:ReadLong()
+            _h2.flMaxEyeDeflection           = _file:ReadFloat()
+            _h2.linearbone_index             = _file:ReadLong()
+
+            _h2.sznameindex = _file:ReadLong()
+
+            _h2.m_nBoneFlexDriverCount = _file:ReadLong()
+            _h2.m_nBoneFlexDriverIndex = _file:ReadLong()
+
+            _h2.unknown = {}
+            for i = 1, 56 do _h2.unknown[i] = _file:ReadLong() end
+        end
+
+        local bones = {}
+        if _h.numbones > 0 then
+            local boneinput_pos
+            local input_pos
+
+            local bone = {}
+            for i = 1, _h.numbones do
+                boneinput_pos = _file:Tell()
+
+                bone.nameindex = _file:ReadLong()
+                bone.parentindex = _file:ReadLong()
+
+                bone.bonecontrollerindex = {}
+                for j = 1, 6 do
+                    bone.bonecontrollerindex[j] = _file:ReadLong()
+                end
+
+                bone.position = read_cvec(_file)
+
+                bone.quat = read_cquat(_file)
+
+                bone.rotation = read_cvec(_file)
+
+                bone.positionscale = read_cvec(_file)
+
+                bone.rotationscale = read_cvec(_file)
+
+                bone.posetobone = {
+                    {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()},
+                    {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()},
+                    {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()}
+                }
+
+                bone.qalignment = read_cquat(_file)
+
+                bone.flags = _file:ReadLong()
+
+                bone.proceduralruletype   = _file:ReadLong()
+                bone.proceduralruleindex  = _file:ReadLong()
+                bone.physicsboneindex     = _file:ReadLong()
+                bone.surfacepropnameindex = _file:ReadLong()
+                bone.contents             = _file:ReadLong()
+
+                bone.unused = {}
+                for j = 1, 8 do
+                    bone.unused[j] = _file:ReadLong()
+                end
+
+                input_pos = _file:Tell()
+
+                if bone.nameindex ~= 0 then
+                    _file:Seek(boneinput_pos + bone.nameindex)
+
+                    bone.name = read_str_nullend(_file)
+                else
+                    bone.name = ""
+                end
+
+                if bone.proceduralruleindex ~= 0 then
+                    _file:Seek(boneinput_pos + bone.proceduralruleindex)
+
+                    if bone.proceduralruletype == STUDIO_PROC_TYPE.STUDIO_PROC_AXISINTERP then
+                        bone.axisinterpbone = {}
+                        bone.axisinterpbone.control = _file:ReadLong()
+
+                        bone.axisinterpbone.pos = {}
+                        for j = 1, 5 do
+                            bone.axisinterpbone.pos[j] = read_cvec(_file)
+                        end
+
+                        bone.axisinterpbone.quat = {}
+                        for j = 1, 5 do
+                            bone.axisinterpbone.quat[j] = read_cquat(_file)
+                        end
+
+                        _file:Seek(input_pos)
+                    elseif bone.proceduralruletype == STUDIO_PROC_TYPE.STUDIO_PROC_QUATINTERP then
+                        local quatinterpboneinput_pos = _file:Tell()
+
+                        bone.quatinterpbone = {}
+                        bone.quatinterpbone.control = _file:ReadLong()
+                        bone.quatinterpbone.numtriggers = _file:ReadLong()
+                        bone.quatinterpbone.triggerindex = _file:ReadLong()
+
+                        local triggers = {}
+                        if bone.quatinterpbone.numtriggers > 0 and bone.quatinterpbone.triggerindex ~= 0 then
+                            _file:Seek(quatinterpboneinput_pos + bone.quatinterpbone.triggerindex)
+
+                            local trigger
+                            for j = 1, bone.quatinterpbone.numtriggers do
+                                trigger = {}
+
+                                trigger.inv_tolerance = _file:ReadFloat()
+                                trigger.trigger       = read_cquat(_file)
+                                trigger.pos           = read_cvec(_file)
+                                trigger.quat          = read_cquat(_file)
+
+                                triggers[#triggers + 1] = trigger
+                            end
+                        end
+
+                        _file:Seek(input_pos)
+                    elseif bone.proceduralruletype == STUDIO_PROC_TYPE.STUDIO_PROC_JIGGLE then
+                        local jigglebone = {}
+
+                        jigglebone.flags = _file:ReadLong()
+                        jigglebone.length = _file:ReadFloat()
+                        jigglebone.tipMass = _file:ReadFloat()
+
+                        jigglebone.yawStiffness = _file:ReadFloat()
+                        jigglebone.yawDamping = _file:ReadFloat()
+                        jigglebone.pitchStiffness = _file:ReadFloat()
+                        jigglebone.pitchDamping = _file:ReadFloat()
+                        jigglebone.alongStiffness = _file:ReadFloat()
+                        jigglebone.alongDamping = _file:ReadFloat()
+
+                        jigglebone.angleLimit = _file:ReadFloat()
+
+                        jigglebone.minYaw = _file:ReadFloat()
+                        jigglebone.maxYaw = _file:ReadFloat()
+                        jigglebone.yawFriction = _file:ReadFloat()
+                        jigglebone.yawBounce = _file:ReadFloat()
+
+                        jigglebone.minPitch = _file:ReadFloat()
+                        jigglebone.maxPitch = _file:ReadFloat()
+                        jigglebone.pitchFriction = _file:ReadFloat()
+                        jigglebone.pitchBounce = _file:ReadFloat()
+
+                        jigglebone.baseMass = _file:ReadFloat()
+                        jigglebone.baseStiffness = _file:ReadFloat()
+                        jigglebone.baseDamping = _file:ReadFloat()
+                        jigglebone.baseMinLeft = _file:ReadFloat()
+                        jigglebone.baseMaxLeft = _file:ReadFloat()
+                        jigglebone.baseLeftFriction = _file:ReadFloat()
+                        jigglebone.baseMinUp = _file:ReadFloat()
+                        jigglebone.baseMaxUp = _file:ReadFloat()
+                        jigglebone.baseUpFriction = _file:ReadFloat()
+                        jigglebone.baseMinForward = _file:ReadFloat()
+                        jigglebone.baseMaxForward = _file:ReadFloat()
+                        jigglebone.baseForwardFriction = _file:ReadFloat()
+
+                        jigglebone.boingImpactSpeed = _file:ReadFloat()
+                        jigglebone.boingImpactAngle = _file:ReadFloat()
+                        jigglebone.boingDampingRate = _file:ReadFloat()
+                        jigglebone.boingFrequency = _file:ReadFloat()
+                        jigglebone.boingAmplitude = _file:ReadFloat()
+                    end
+                end
+
+                if bone.surfacepropnameindex ~= 0 then
+                    _file:Seek(boneinput_pos + bone.surfacepropnameindex)
+
+                    bone.surfacepropname = read_str_nullend(_file)
+                else
+                    bone.surfacepropname = ""
+                end
+
+                _file:Seek(input_pos)
+
+                bones[#bones + 1] = bone
+            end
+
+        end
+
+
         _file:Close()
 
-        return _h, _file:Tell() -- should be 408
+        return 
     end
 
-    local function rhdr2_mdl(_path, offset)
-        local _file = file_open(_path, "rb", "GAME")
-
-        local _h2 = {}
-
-        _file:Seek(offset)
-
-        _h2.srcbonetransform_count = _file:ReadLong()
-        _h2.srcbonetransform_index = _file:ReadLong()
-
-        _h2.illumpositionattachmentindex = _file:ReadLong()
-
-        _h2.flMaxEyeDeflection = _file:ReadFloat()
-
-        _h2.linearbone_index = _file:ReadLong()
-
-        _h2.unknown = {}
-        for i = 1, 64 do _h2.unknown[i] = _file:ReadLong() end
-
-        _file:Close()
-
-        return _h2
+    do
+        rhdr_mdl("models/alyx.mdl")
     end
-
-    PrintTable(rhdr_mdl("models/dog.mdl"))print()
-    PrintTable(rhdr2_mdl("models/dog.mdl", 408))
 
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
     -- Currently, only mdl's header check is implemented
