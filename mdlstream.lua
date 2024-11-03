@@ -198,7 +198,6 @@ if CLIENT then
     end
 
     local mdl_determinant = {
-        id = {73, 68, 83, 84}, -- "IDST". no "MDLZ"
         versions = {
             --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
             -- 14 is used in "Half-Life SDK", too old
@@ -208,29 +207,6 @@ if CLIENT then
             [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
         }
     }
-
-    local STUDIO_PROC_TYPE = {
-        STUDIO_PROC_AXISINTERP = 1,
-        STUDIO_PROC_QUATINTERP = 2,
-        STUDIO_PROC_AIMATBONE = 3,
-        STUDIO_PROC_AIMATATTACH = 4,
-        STUDIO_PROC_JIGGLE = 5
-    }
-
-    local STUDIO_FRAMEANIM = 0x0040
-
-    local function read_cint(_file) return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
-    local function read_cvec(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
-    local function read_cquat(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
-    local function read_str_nullend(_file)
-        local char = _file:Read(1)
-        local _s = {}
-        while char ~= "\0" do
-            _s[#_s + 1] = char
-            char = _file:Read(1)
-        end
-        return tblib_concat(_s)
-    end
 
     local function rhdr_mdl_simple(_path)
         local _file = file_open(_path, "rb", "GAME")
