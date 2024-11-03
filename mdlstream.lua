@@ -217,6 +217,8 @@ if CLIENT then
         STUDIO_PROC_JIGGLE = 5
     }
 
+    local STUDIO_FRAMEANIM = 0x0040
+
     local function read_cint(_file) return {cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file), cfile_rbyte(_file)} end
     local function read_cvec(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
     local function read_cquat(_file) return {_file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat(), _file:ReadFloat()} end
@@ -230,14 +232,14 @@ if CLIENT then
         return tblib_concat(_s)
     end
 
+    -- TODO: below is targeted at ver44, make it suitable for above vers
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/public/studio.h#L2062-L2340
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp#L2753-#L3123
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/mdlinfo/main.cpp
-    local function read_model(_path)
+    local function read_model(_path, only_simple_info)
         local _file = file_open(_path, "rb", "GAME")
 
         local _h = {}
-        local _data = {}
 
         _h.id       = _file:ReadLong()
         _h.version  = _file:ReadLong()
@@ -245,72 +247,53 @@ if CLIENT then
         _h.name     = _file:Read(64)
         _h.length   = _file:ReadLong()
 
-        _h.eyeposition   = read_cvec(_file)
-        _h.illumposition = read_cvec(_file)
+        if only_simple_info then _file:Close() return _h end
 
-        _h.hull_min = read_cvec(_file)
-        _h.hull_max = read_cvec(_file)
+        local _data = {}
 
-        _h.view_bbmin = read_cvec(_file)
-        _h.view_bbmax = read_cvec(_file)
+        _h.eyeposition = read_cvec(_file); _h.illumposition = read_cvec(_file)
+
+        _h.hull_min    = read_cvec(_file); _h.hull_max      = read_cvec(_file)
+
+        _h.view_bbmin  = read_cvec(_file); _h.view_bbmax    = read_cvec(_file)
 
         _h.flags = _file:ReadLong()
 
-        _h.numbones  = _file:ReadLong()
-        _h.boneindex = _file:ReadLong()
+        _h.numbones            = _file:ReadLong(); _h.boneindex           = _file:ReadLong()
 
-        _h.numbonecontrollers  = _file:ReadLong()
-        _h.bonecontrollerindex = _file:ReadLong()
+        _h.numbonecontrollers  = _file:ReadLong(); _h.bonecontrollerindex = _file:ReadLong()
 
-        _h.numhitboxsets  = _file:ReadLong()
-        _h.hitboxsetindex = _file:ReadLong()
+        _h.numhitboxsets       = _file:ReadLong(); _h.hitboxsetindex      = _file:ReadLong()
 
-        _h.numlocalanim   = _file:ReadLong()
-        _h.localanimindex = _file:ReadLong()
+        _h.numlocalanim        = _file:ReadLong(); _h.localanimindex      = _file:ReadLong()
 
-        _h.numlocalseq   = _file:ReadLong()
-        _h.localseqindex = _file:ReadLong()
+        _h.numlocalseq         = _file:ReadLong(); _h.localseqindex       = _file:ReadLong()
 
-        _h.activitylistversion = _file:ReadLong()
-        _h.eventsindexed       = _file:ReadLong()
+        _h.activitylistversion = _file:ReadLong(); _h.eventsindexed       = _file:ReadLong()
 
-        _h.numtextures  = _file:ReadLong()
-        _h.textureindex = _file:ReadLong()
+        _h.numtextures         = _file:ReadLong(); _h.textureindex        = _file:ReadLong()
 
-        _h.numcdtextures  = _file:ReadLong()
-        _h.cdtextureindex = _file:ReadLong()
+        _h.numcdtextures       = _file:ReadLong(); _h.cdtextureindex      = _file:ReadLong()
 
-        _h.numskinref      = _file:ReadLong()
-        _h.numskinfamilies = _file:ReadLong()
-        _h.skinindex       = _file:ReadLong()
+        _h.numskinref = _file:ReadLong(); _h.numskinfamilies = _file:ReadLong(); _h.skinindex = _file:ReadLong()
 
-        _h.numbodyparts  = _file:ReadLong()
-        _h.bodypartindex = _file:ReadLong()
+        _h.numbodyparts        = _file:ReadLong(); _h.bodypartindex        = _file:ReadLong()
 
-        _h.numlocalattachments  = _file:ReadLong()
-        _h.localattachmentindex = _file:ReadLong()
+        _h.numlocalattachments = _file:ReadLong(); _h.localattachmentindex = _file:ReadLong()
 
-        _h.numlocalnodes      = _file:ReadLong()
-        _h.localnodeindex     = _file:ReadLong()
-        _h.localnodenameindex = _file:ReadLong()
+        _h.numlocalnodes = _file:ReadLong(); _h.localnodeindex = _file:ReadLong(); _h.localnodenameindex = _file:ReadLong()
 
-        _h.numflexdesc   = _file:ReadLong()
-        _h.flexdescindex = _file:ReadLong()
+        _h.numflexdesc            = _file:ReadLong(); _h.flexdescindex       = _file:ReadLong()
 
-        _h.numflexcontrollers  = _file:ReadLong()
-        _h.flexcontrollerindex = _file:ReadLong()
+        _h.numflexcontrollers     = _file:ReadLong(); _h.flexcontrollerindex = _file:ReadLong()
 
-        _h.numflexrules  = _file:ReadLong()
-        _h.flexruleindex = _file:ReadLong()
+        _h.numflexrules           = _file:ReadLong(); _h.flexruleindex       = _file:ReadLong()
 
-        _h.numikchains  = _file:ReadLong()
-        _h.ikchainindex = _file:ReadLong()
+        _h.numikchains            = _file:ReadLong(); _h.ikchainindex        = _file:ReadLong()
 
-        _h.nummouths  = _file:ReadLong()
-        _h.mouthindex = _file:ReadLong()
+        _h.nummouths              = _file:ReadLong(); _h.mouthindex          = _file:ReadLong()
 
-        _h.numlocalposeparameters = _file:ReadLong()
-        _h.localposeparamindex    = _file:ReadLong()
+        _h.numlocalposeparameters = _file:ReadLong(); _h.localposeparamindex = _file:ReadLong()
 
         _h.surfacepropindex = _file:ReadLong()
 
@@ -324,18 +307,15 @@ if CLIENT then
             _file:Seek(input_pos)
         end
 
-        _h.keyvalueindex = _file:ReadLong()
-        _h.keyvaluesize  = _file:ReadLong()
+        _h.keyvalueindex           = _file:ReadLong(); _h.keyvaluesize             = _file:ReadLong()
 
-        _h.numlocalikautoplaylocks  = _file:ReadLong()
-        _h.localikautoplaylockindex = _file:ReadLong()
+        _h.numlocalikautoplaylocks = _file:ReadLong(); _h.localikautoplaylockindex = _file:ReadLong()
 
         _h.mass = _file:ReadFloat()
 
         _h.contents = _file:ReadLong()
 
-        _h.numincludemodels  = _file:ReadLong()
-        _h.includemodelindex = _file:ReadLong()
+        _h.numincludemodels  = _file:ReadLong(); _h.includemodelindex = _file:ReadLong()
 
         _h.virtualmodel = _file:ReadLong()
 
@@ -427,7 +407,7 @@ if CLIENT then
 
                 bone = {}
 
-                bone.nameindex = _file:ReadLong()
+                bone.nameindex   = _file:ReadLong()
                 bone.parentindex = _file:ReadLong()
 
                 bone.bonecontrollerindex = {}
@@ -505,68 +485,69 @@ if CLIENT then
                             _file:Seek(quatinterpboneinput_pos + bone.quatinterpbone.triggerindex)
 
                             for j = 1, bone.quatinterpbone.numtriggers do
-                                bone.quatinterpbone.triggers[j] = {}
-                                bone.quatinterpbone.triggers[j].inv_tolerance = _file:ReadFloat()
-                                bone.quatinterpbone.triggers[j].trigger       = read_cquat(_file)
-                                bone.quatinterpbone.triggers[j].pos           = read_cvec(_file)
-                                bone.quatinterpbone.triggers[j].quat          = read_cquat(_file)
+                                bone.quatinterpbone.triggers[j] = {
+                                    inv_tolerance = _file:ReadFloat(),
+                                    trigger       = read_cquat(_file),
+                                    pos           = read_cvec(_file),
+                                    quat          = read_cquat(_file)
+                                }
                             end
                         end
 
                         _file:Seek(input_pos)
                     elseif bone.proceduralruletype == STUDIO_PROC_TYPE.STUDIO_PROC_AIMATBONE then
-                        bone.aimatbone = {}
+                        bone.aimatbone = {
+                            parent = _file:ReadLong(),
+                            aim    = _file:ReadLong(),
 
-                        bone.parent = _file:ReadLong()
-                        bone.aim    = _file:ReadLong()
-
-                        bone.aimvector = read_cvec(_file)
-                        bone.upvector  = read_cvec(_file)
-                        bone.basepos   = read_cvec(_file)
+                            aimvector = read_cvec(_file),
+                            upvector  = read_cvec(_file),
+                            basepos   = read_cvec(_file)
+                        }
                     elseif bone.proceduralruletype == STUDIO_PROC_TYPE.STUDIO_PROC_JIGGLE then
-                        bone.jigglebone = {}
+                        bone.jigglebone = {
+                            flags   = _file:ReadLong(),
+                            length  = _file:ReadFloat(),
+                            tipMass = _file:ReadFloat(),
 
-                        bone.jigglebone.flags   = _file:ReadLong()
-                        bone.jigglebone.length  = _file:ReadFloat()
-                        bone.jigglebone.tipMass = _file:ReadFloat()
+                            yawStiffness   = _file:ReadFloat(),
+                            yawDamping     = _file:ReadFloat(),
+                            pitchStiffness = _file:ReadFloat(),
+                            pitchDamping   = _file:ReadFloat(),
+                            alongStiffness = _file:ReadFloat(),
+                            alongDamping   = _file:ReadFloat(),
 
-                        bone.jigglebone.yawStiffness   = _file:ReadFloat()
-                        bone.jigglebone.yawDamping     = _file:ReadFloat()
-                        bone.jigglebone.pitchStiffness = _file:ReadFloat()
-                        bone.jigglebone.pitchDamping   = _file:ReadFloat()
-                        bone.jigglebone.alongStiffness = _file:ReadFloat()
-                        bone.jigglebone.alongDamping   = _file:ReadFloat()
+                            angleLimit = _file:ReadFloat(),
 
-                        bone.jigglebone.angleLimit = _file:ReadFloat()
+                            minYaw      = _file:ReadFloat(),
+                            maxYaw      = _file:ReadFloat(),
+                            yawFriction = _file:ReadFloat(),
+                            yawBounce   = _file:ReadFloat(),
 
-                        bone.jigglebone.minYaw      = _file:ReadFloat()
-                        bone.jigglebone.maxYaw      = _file:ReadFloat()
-                        bone.jigglebone.yawFriction = _file:ReadFloat()
-                        bone.jigglebone.yawBounce   = _file:ReadFloat()
+                            minPitch      = _file:ReadFloat(),
+                            maxPitch      = _file:ReadFloat(),
+                            pitchFriction = _file:ReadFloat(),
+                            pitchBounce   = _file:ReadFloat(),
 
-                        bone.jigglebone.minPitch      = _file:ReadFloat()
-                        bone.jigglebone.maxPitch      = _file:ReadFloat()
-                        bone.jigglebone.pitchFriction = _file:ReadFloat()
-                        bone.jigglebone.pitchBounce   = _file:ReadFloat()
+                            baseMass            = _file:ReadFloat(),
+                            baseStiffness       = _file:ReadFloat(),
+                            baseDamping         = _file:ReadFloat(),
+                            baseMinLeft         = _file:ReadFloat(),
+                            baseMaxLeft         = _file:ReadFloat(),
+                            baseLeftFriction    = _file:ReadFloat(),
+                            baseMinUp           = _file:ReadFloat(),
+                            baseMaxUp           = _file:ReadFloat(),
+                            baseUpFriction      = _file:ReadFloat(),
+                            baseMinForward      = _file:ReadFloat(),
+                            baseMaxForward      = _file:ReadFloat(),
+                            baseForwardFriction = _file:ReadFloat(),
 
-                        bone.jigglebone.baseMass            = _file:ReadFloat()
-                        bone.jigglebone.baseStiffness       = _file:ReadFloat()
-                        bone.jigglebone.baseDamping         = _file:ReadFloat()
-                        bone.jigglebone.baseMinLeft         = _file:ReadFloat()
-                        bone.jigglebone.baseMaxLeft         = _file:ReadFloat()
-                        bone.jigglebone.baseLeftFriction    = _file:ReadFloat()
-                        bone.jigglebone.baseMinUp           = _file:ReadFloat()
-                        bone.jigglebone.baseMaxUp           = _file:ReadFloat()
-                        bone.jigglebone.baseUpFriction      = _file:ReadFloat()
-                        bone.jigglebone.baseMinForward      = _file:ReadFloat()
-                        bone.jigglebone.baseMaxForward      = _file:ReadFloat()
-                        bone.jigglebone.baseForwardFriction = _file:ReadFloat()
-
-                        bone.jigglebone.boingImpactSpeed = _file:ReadFloat()
-                        bone.jigglebone.boingImpactAngle = _file:ReadFloat()
-                        bone.jigglebone.boingDampingRate = _file:ReadFloat()
-                        bone.jigglebone.boingFrequency   = _file:ReadFloat()
-                        bone.jigglebone.boingAmplitude   = _file:ReadFloat()
+                            boingImpactSpeed = _file:ReadFloat(),
+                            boingImpactAngle = _file:ReadFloat(),
+                            boingDampingRate = _file:ReadFloat(),
+                            boingFrequency   = _file:ReadFloat(),
+                            boingAmplitude   = _file:ReadFloat()
+                        }
                     end
                 end
 
@@ -615,23 +596,24 @@ if CLIENT then
             for i = 1, _h.numlocalattachments do
                 local attachmentinput_pos = _file:Tell()
 
-                attachments[i] = {}
-                attachments[i].sznameindex = _file:ReadLong()
-                attachments[i].flags       = _file:ReadLong()
-                attachments[i].localbone   = _file:ReadLong()
+                attachments[i] = {
+                    sznameindex = _file:ReadLong(),
+                    flags       = _file:ReadLong(),
+                    localbone   = _file:ReadLong(),
 
-                attachments[i].localM11 = _file:ReadFloat()
-                attachments[i].localM12 = _file:ReadFloat()
-                attachments[i].localM13 = _file:ReadFloat()
-                attachments[i].localM14 = _file:ReadFloat()
-                attachments[i].localM21 = _file:ReadFloat()
-                attachments[i].localM22 = _file:ReadFloat()
-                attachments[i].localM23 = _file:ReadFloat()
-                attachments[i].localM24 = _file:ReadFloat()
-                attachments[i].localM31 = _file:ReadFloat()
-                attachments[i].localM32 = _file:ReadFloat()
-                attachments[i].localM33 = _file:ReadFloat()
-                attachments[i].localM34 = _file:ReadFloat()
+                    localM11 = _file:ReadFloat(),
+                    localM12 = _file:ReadFloat(),
+                    localM13 = _file:ReadFloat(),
+                    localM14 = _file:ReadFloat(),
+                    localM21 = _file:ReadFloat(),
+                    localM22 = _file:ReadFloat(),
+                    localM23 = _file:ReadFloat(),
+                    localM24 = _file:ReadFloat(),
+                    localM31 = _file:ReadFloat(),
+                    localM32 = _file:ReadFloat(),
+                    localM33 = _file:ReadFloat(),
+                    localM34 = _file:ReadFloat()
+                }
 
                 attachments[i].unused = {}
                 for j = 1, 8 do
@@ -659,10 +641,11 @@ if CLIENT then
             for i = 1, _h.numhitboxsets do
                 local hitboxsetinput_pos = _file:Tell()
 
-                hitboxsets[i] = {}
-                hitboxsets[i].sznameindex = _file:ReadLong()
-                hitboxsets[i].numhitboxes = _file:ReadLong()
-                hitboxsets[i].hitboxindex = _file:ReadLong()
+                hitboxsets[i] = {
+                    sznameindex = _file:ReadLong(),
+                    numhitboxes = _file:ReadLong(),
+                    hitboxindex = _file:ReadLong()
+                }
 
                 local input_pos = _file:Tell()
 
@@ -679,12 +662,13 @@ if CLIENT then
 
                     hitboxsets[i].hitboxes = {}
                     for j = 1, hitboxsets[i].numhitboxes do
-                        hitboxsets[i].hitboxes[j] = {}
-                        hitboxsets[i].hitboxes[j].bone = _file:ReadLong()
-                        hitboxsets[i].hitboxes[j].group = _file:ReadLong()
-                        hitboxsets[i].hitboxes[j].bbmin = read_cvec(_file)
-                        hitboxsets[i].hitboxes[j].bbmax = read_cvec(_file)
-                        hitboxsets[i].hitboxes[j].szhitboxnameindex = _file:ReadLong()
+                        hitboxsets[i].hitboxes[j] = {
+                            bone              = _file:ReadLong(),
+                            group             = _file:ReadLong(),
+                            bbmin             = read_cvec(_file),
+                            bbmax             = read_cvec(_file),
+                            szhitboxnameindex = _file:ReadLong()
+                        }
 
                         hitboxsets[i].hitboxes[j].unused = {}
                         for k = 1, 8 do
@@ -709,16 +693,205 @@ if CLIENT then
             end
         end
 
-        -- https://github.com/ZeqMacaw/Crowbar/blob/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel/SourceModel44/SourceMdlFile44.vb#L903
-        -- TODO:
+        local bonetablebyname = {}
+        if _h.bonetablebynameindex ~= 0 and #bones > 0 then
+            _file:Seek(_h.bonetablebynameindex)
+
+            for i = 1, _h.numbones do
+                bonetablebyname[i] = _file:ReadByte()
+            end
+        end
+
+        local animdescs = {}
+        if _h.numlocalanim > 0 then
+            _file:Seek(_h.localanimindex)
+
+            for i = 1, _h.numlocalanim do
+                local animinput_pos = _file:Tell()
+
+                animdescs[i] = {}
+
+                animdescs[i].offsetstart = _file:Tell()
+
+                animdescs[i].baseptr       = _file:ReadLong()
+                animdescs[i].sznameindex   = _file:ReadLong()
+                animdescs[i].fps           = _file:ReadFloat()
+                animdescs[i].flags         = _file:ReadLong()
+                animdescs[i].numframes     = _file:ReadLong()
+                animdescs[i].nummovements  = _file:ReadLong()
+                animdescs[i].movementindex = _file:ReadLong()
+
+                animdescs[i].unused = {}
+
+                for j = 1, 6 do
+                    animdescs[i].unused[j] = _file:ReadLong()
+                end
+
+                animdescs[i].animblock            = _file:ReadLong()
+                animdescs[i].animindex            = _file:ReadLong()
+                animdescs[i].numikrules           = _file:ReadLong()
+                animdescs[i].ikruleindex          = _file:ReadLong()
+                animdescs[i].animblockikruleindex = _file:ReadLong()
+                animdescs[i].numlocalhierarchy    = _file:ReadLong()
+                animdescs[i].localhierarchyindex  = _file:ReadLong()
+                animdescs[i].sectionindex         = _file:ReadLong()
+                animdescs[i].sectionframes        = _file:ReadLong()
+                animdescs[i].zeroframespan        = _file:ReadShort()
+                animdescs[i].zeroframecount       = _file:ReadShort()
+                animdescs[i].zeroframeindex       = _file:ReadLong()
+                animdescs[i].zeroframestalltime   = _file:ReadFloat()
+
+                local input_pos = _file:Tell()
+
+                if animdescs[i].sznameindex ~= 0 then
+                    _file:Seek(animinput_pos + animdescs[i].sznameindex)
+
+                    animdescs[i].name = read_str_nullend(_file)
+
+                    if str_startswith(animdescs[i].name, "a_../") or str_startswith(animdescs[i].name, "a_..\\") then
+                        animdescs[i].name = str_sub(animdescs[i].name, 6)
+                        animdescs[i].name = string.GetPathFromFilename(animdescs[i].name) .. "a_" .. string.GetFileFromFilename(animdescs[i].name)
+                    end
+                else
+                    animdescs[i].name = ""
+                end
+
+                if animdescs[i].zeroframespan ~= 0 or animdescs[i].zeroframecount ~= 0 or
+                    animdescs[i].zeroframeindex ~= 0 or animdescs[i].zeroframestalltime ~= 0 then
+                    -- TODO: this may not be important
+                end
+
+                if animdescs[i].nummovements > 0 then
+                    _file:Seek(animinput_pos + animdescs[i].movementindex)
+
+                    animdescs[i].movements = {}
+                    for j = 1, animdescs[i].nummovements do
+                        animdescs[i].movements[j] = {
+                            endframe    = _file:ReadLong(),
+                            motionflags = _file:ReadLong(),
+                            v0          = _file:ReadFloat(),
+                            v1          = _file:ReadFloat(),
+                            angle       = _file:ReadFloat(),
+                            vector      = read_cvec(_file),
+                            position    = read_cvec(_file)
+                        }
+                    end
+                end
+
+                _file:Seek(input_pos)
+            end
+
+            -- TODO: verify
+            local numsections
+            local offset
+            for i, animdesc in ipairs(animdescs) do
+                animdesc.animsections = {}
+                animdesc.animsections[#animdesc.animsections + 1] = {}
+
+                if animdesc.sectionindex ~= 0 and animdesc.sectionframes > 0 then
+                    _data.sectionframes = animdesc.sectionframes
+                    if _data.sectionframes >= animdesc.sectionframes then
+                        _data.sectionframes = animdesc.sectionframes - 1
+                    end
+
+                    numsections = math.Truncate(animdesc.numframes / animdesc.sectionframes) + 2
+
+                    for sectionindex = 1, numsections - 1 do
+                        animdesc.animsections[#animdesc.animsections + 1] = {}
+                    end
+
+                    offset = animdesc.offsetstart + animdesc.sectionindex
+                    if offset ~= _file:Tell() then
+                        _file:Seek(offset)
+                    end
+
+                    animdesc.sections = {}
+                    for j = 1, numsections do
+                        animdesc.sections[j] = {
+                            animblock = _file:ReadLong(),
+                            animindex = _file:ReadLong()
+                        }
+                    end
+                end
+            end
+
+            -- https://github.com/ZeqMacaw/Crowbar/blob/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel/SourceModel44/SourceMdlFile44.vb#L1322
+            -- TODO:
+            local function read_mdl_anims(_pos, _animdesc, _sectionframes, _sectionindex, lastsectionisbeingread)
+                local animsection = _animdesc.animsections
+
+                _file:Seek(_pos)
+
+                local numbones
+                if #bones == 0 then
+                    numbones = 1
+                else
+                    numbones = #bones
+                end
+
+                for i = 1, numbones do
+
+                end
+            end
+
+            -- TODO: verify
+            local adjustedanimindex
+            local sectionframes
+            local animinput_pos
+            for i, animdesc in ipairs(animdescs) do
+                animinput_pos = _file:Tell()
+
+                if not _data.firstanimdesc and str_sub(animdesc.name, 1, 1) ~= "@" then
+                    _data.firstanimdesc = animdesc
+                end
+
+                if (animdesc.flags and STUDIO_FRAMEANIM) ~= 0 then
+                    -- do nothing
+                else
+                    if istable(animdesc.sections)and #animdesc.sections > 0 then
+                        for j, section in ipairs(animdesc.sections) do
+                            if section.animblock == 0 then
+                                adjustedanimindex = section.animindex + (animdesc.animindex - animdesc.sections[1].animindex)
+
+                                if j < #animdesc.sections - 1 then
+                                    sectionframes = animdesc.sectionframes
+                                else
+                                    sectionframes = animdesc.numframes - ((#animdesc.sections - 1) * animdesc.sectionframes)
+                                end
+
+                                read_mdl_anims(animinput_pos + adjustedanimindex,
+                                    animdesc,
+                                    sectionframes,
+                                    j,
+                                    (j >= #animdesc.sections - 1) or (animdesc.numframes == j * animdesc.sectionframes)
+                                )
+                            end
+                        end
+                    elseif animdesc.animblock == 0 then
+                        read_mdl_anims(animinput_pos + adjustedanimindex, animdesc, animdesc.numframes, 1, true)
+                    end
+                end
+
+                if _h.version == 44 or animdesc.animblock == 0 then
+                    -- Me.ReadMdlIkRules(animInputFileStreamPosition, anAnimationDesc)
+                    -- Me.ReadLocalHierarchies(animInputFileStreamPosition, anAnimationDesc)
+                end
+            end
+
+            -- https://github.com/ZeqMacaw/Crowbar/blob/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel/SourceModel44/SourceModel44.vb#L376
+            -- https://github.com/ZeqMacaw/Crowbar/blob/0d46f3b6a694b74453db407c72c12a9685d8eb1d/Crowbar/Core/GameModel/SourceModel44/SourceMdlFile44.vb#L926
+            -- TODO:
+
+        end
 
         _data.bones = bones
         _data.bonecontrollers = bonecontrollers
         _data.attachments = attachments
         _data.hitboxsets = hitboxsets
+        _data.bonetablebyname = bonetablebyname
 
         _file:Close()
-        PrintTable(hitboxsets[1])
+        PrintTable({})
 
         return 
     end
@@ -728,33 +901,26 @@ if CLIENT then
     end
 
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
-    -- Currently, only mdl's header check is implemented
-    -- TODO: rewrite below func
+    -- TODO: Currently, only mdl's header check is implemented
     local function validate_header(_path)
         local _file = file_open(_path, "rb", "GAME")
 
         if _file:Read(2) == "MZ" then return false end
-        _file:Skip(-2)
+
+        _file:Close()
 
         if str_ext_fromfile(_path) ~= "mdl" then return true end
 
         local function hext_to_int(_t) return tonumber(str_fmt("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1])) end
 
-        local studiohdr_t = {
-            id = read_cint(), version = read_cint(), checksum = read_cint(), name = _file:Read(64), datalen = read_cint()
-        }
+        local studiohdr_t = read_model(_path, true)
 
-        _file:Close()
+        if studiohdr_t.id     ~= 1414743113 then return false end
+        if studiohdr_t.length ~= file_size(_path, "GAME")   then return false end
 
-        if  studiohdr_t.id[1] ~= mdl_determinant.id[1] or studiohdr_t.id[2] ~= mdl_determinant.id[2] or
-            studiohdr_t.id[3] ~= mdl_determinant.id[3] or studiohdr_t.id[4] ~= mdl_determinant.id[4] then
-            return false
-        end
-
-        if not mdl_determinant.versions[hext_to_int(studiohdr_t.version)] then return false end
-        if not studiohdr_t.checksum or not #studiohdr_t.checksum == 4     then return false end
-        if not studiohdr_t.name                                           then return false end
-        if hext_to_int(studiohdr_t.datalen) ~= file_size(_path, "GAME")   then return false end
+        if not mdl_determinant.versions[studiohdr_t.version] then return false end
+        if not studiohdr_t.checksum then return false end
+        if not studiohdr_t.name     then return false end
 
         return true
     end
