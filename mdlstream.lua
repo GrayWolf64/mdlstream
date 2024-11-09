@@ -28,14 +28,16 @@ mdlstream = {}
 ---
 --* Switches
 --
--- `flag_testing`: Disables file existence check serverside
--- `flag_noclui`:  Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
--- `flag_allperm`: Disables permission(admin) check when performing certain non-programmatic actions, like `request`
--- `flag_keepobj`: True to keep original downloaded file, false to only keep encapsulated .gma
-local flag_testing = true
-local flag_noclui  = false
-local flag_allperm = true
-local flag_keepobj = false
+-- `flag_testing`:  Disables file existence check serverside
+-- `flag_noclui`:   Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
+-- `flag_allperm`:  Disables permission(admin) check when performing certain non-programmatic actions, like `request`
+-- `flag_keepobj`:  True to keep original downloaded file, false to only keep encapsulated .gma
+-- `flag_nohdrchk`: Disables valve file header check, used for testing with randomly generated file
+local flag_testing  = true
+local flag_noclui   = false
+local flag_allperm  = true
+local flag_keepobj  = false
+local flag_nohdrchk = true
 
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
@@ -321,7 +323,10 @@ if CLIENT then
         local size = file_size(path, "GAME")
 
         assert(size <= max_file_size, mstr"Tries to send file larger than 8388608 bytes, " .. path)
-        assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), " .. path)
+
+        if not flag_nohdrchk then
+            assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), " .. path)
+        end
 
         if not callback or not isfunction(callback) then callback = fun_donothing end
 
@@ -757,3 +762,7 @@ else
         netlib_send(user)
     end)
 end
+
+--- Test field(one player, local server)
+-- randomly generated text file with certain size(optimizations can't be applied to it other than lzma)
+-- 01:16:94 '8MiB.mdl', avg spd 109.02 KB/s, 2024/11/10
