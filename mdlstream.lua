@@ -300,9 +300,7 @@ if CLIENT then
             chars[#chars + 1] = _map[byte]
         end
 
-        local _s = tblib_concat(chars)
-
-        local res = lzma(_s)
+        local res = lzma(tblib_concat(chars))
         if flag_testing then stdout:append(str_fmt("encoded len: %i", #res), true) end
 
         return res
@@ -320,8 +318,8 @@ if CLIENT then
 
         local size = file_size(path, "GAME")
 
-        assert(size <= max_file_size, mstr"Tries to send file larger than 8.75 MB(8750000 bytes decimal), " .. path)
-        assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), "                  .. path)
+        assert(size <= max_file_size, mstr"Tries to send file larger than 8388608 bytes, " .. path)
+        assert(validate_header(path), mstr"Corrupted or intentionally bad file (header), " .. path)
 
         if not callback or not isfunction(callback) then callback = fun_donothing end
 
