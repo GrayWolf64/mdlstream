@@ -48,7 +48,7 @@ local flag_keepobj = false
 -- 3 for #content frame ending position
 -- 8 for uid(int64:str) of every accepted request, generated on client
 -- some bytes spared for testing the most optimal size
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 11518
+local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10518
 
 local tonumber            = tonumber
 local isvalid             = IsValid
@@ -654,6 +654,8 @@ else
         _f:WriteULong(tonumber(util.CRC(file.Read(path_gma, "DATA"))))
 
         _f:Close()
+
+        return path_gma
     end
 
     local function ctb(_s, _map)
@@ -666,6 +668,7 @@ else
         return _bytes
     end
 
+    -- TODO: ensure file save failure got dealt with
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
@@ -697,7 +700,7 @@ else
 
             _file:Close()
 
-            wgma(path, file.Read(path, "DATA"), uid)
+            local _path_gma = string.StripExtension(wgma(path, file.Read(path, "DATA"), uid))
 
             if not flag_keepobj then file.Delete(path, "DATA") end
 
@@ -705,7 +708,7 @@ else
 
             print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
                 string.FormattedTime(tlapse, "%02i:%02i:%02i"), path,
-                user:SteamID64(), string.NiceSize(file_size(path .. Either(flag_keepobj, "", ".gma"), "DATA") / tlapse)))
+                user:SteamID64(), string.NiceSize(file_size(_path_gma .. Either(flag_keepobj, "", ".gma"), "DATA") / tlapse)))
 
             temp[uid] = nil
 
