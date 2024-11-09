@@ -240,11 +240,11 @@ if CLIENT then
         local studiohdr_t = rhdr_mdl_simple(_path)
 
         if studiohdr_t.id     ~= 1414743113 then return false end
-        if studiohdr_t.length ~= file_size(_path, "GAME")   then return false end
+        if studiohdr_t.length ~= file_size(_path, "GAME") then return false end
 
         if not mdl_determinant.versions[studiohdr_t.version] then return false end
         if not studiohdr_t.checksum then return false end
-        if not studiohdr_t.name     then return false end
+        if not studiohdr_t.name then return false end
 
         return true
     end
@@ -300,7 +300,9 @@ if CLIENT then
             chars[#chars + 1] = _map[byte]
         end
 
-        local res = lzma(tblib_concat(chars))
+        local _s = tblib_concat(chars)
+
+        local res = lzma(_s)
         if flag_testing then stdout:append(str_fmt("encoded len: %i", #res), true) end
 
         return res
