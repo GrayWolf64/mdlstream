@@ -704,11 +704,11 @@ else
 
             if not flag_keepobj then file.Delete(path, "DATA") end
 
-            local tlapse = systime() - temp[uid][3]
+            local dt = systime() - temp[uid][3]
 
             print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
-                string.FormattedTime(tlapse, "%02i:%02i:%02i"), path,
-                user:SteamID64(), string.NiceSize(file_size(_path_gma .. Either(flag_keepobj, "", ".gma"), "DATA") / tlapse)))
+                string.FormattedTime(dt, "%02i:%02i:%02i"), path,
+                user:SteamID64(), string.NiceSize(file_size(_path_gma .. Either(flag_keepobj, "", ".gma"), "DATA") / dt)))
 
             temp[uid] = nil
 
