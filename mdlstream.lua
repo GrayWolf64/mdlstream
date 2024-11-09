@@ -18,7 +18,8 @@
 -- @license Apache License 2.0
 --
 -- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
--- Thanks to https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel for some crucial hints on mdl header1
+-- Thanks to: https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel for some crucial hints on mdl header1
+-- Torture when unearthing a mdl structure: https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp
 --
 if not gmod or game.SinglePlayer() then return end
 
@@ -621,7 +622,7 @@ else
     -- https://github.com/CapsAdmin/pac3/blob/master/lua/pac3/core/shared/util.lua#L145
     -- https://github.com/Facepunch/gmad/blob/master/include/AddonReader.h
     local function wgma(_path, _content, _uid)
-        local path_gma = string.gsub(_path, "%/", "//") .. ".gma"
+        local path_gma = string.gsub(_path, "%/", ".") .. ".gma"
         local _f = file_open(path_gma, "wb", "DATA")
         if not str_startswith(_path, "models/") then _path = "models/" .. _path end
 
