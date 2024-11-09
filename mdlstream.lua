@@ -7,7 +7,7 @@
 -- Limited file formats
 -- Handshake styled transmission
 --
--- !If you are server owner, I suggest you using https://github.com/WilliamVenner/gmsv_workshop/ for better experience
+-- ! If you are server owner, I suggest you using https://github.com/WilliamVenner/gmsv_workshop/ for better experience
 -- You can of course use this as a fallback option
 --
 -- Possible Workflow: Client Request ==> Server receives Request ==> Server Blinks(acknowledge) ==> Client receives Blink
@@ -40,16 +40,6 @@ local flag_keepobj = false
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
 --
--- FRAME content:
--- 3 spared for engine use
--- 1 for determining the response mode
--- #content for the actual partial(sliced) compressed string of byte sequence of target file
--- 3 for #content(slice / frame) length
--- 3 for #content frame ending position
--- 8 for uid(int64:str) of every accepted request, generated on client
--- some bytes spared for testing the most optimal size
-local max_msg_size        = 65536 - 3 - 1 - 3 - 3 - 8 - 10518
-
 local tonumber            = tonumber
 local isvalid             = IsValid
 local systime             = SysTime
@@ -68,6 +58,7 @@ local netlib_ruint        = function() return net.ReadUInt(24) end
 --
 --   0: Server has refused request(file already exists on server)
 --   1: Server has built file and sends an ack for finalization
+--   2: Server has refused request, whose serverside temp isn't allocated properly ahead of time
 -- 100: Server has accepted Client's request, awaits the first frame
 -- 101: Server awaits subsequent frame
 -- 200: Client sends a frame that can be received and built on Server using previously received frames or
@@ -95,6 +86,16 @@ local file_open           = function(_f, _m, _p)
 end
 
 if CLIENT then
+    -- FRAME content:
+    -- 3 spared for engine use
+    -- 1 for determining the response mode
+    -- #content for the actual partial(sliced) compressed string of byte sequence of target file
+    -- 3 for #content(slice / frame) length
+    -- 3 for #content frame ending position
+    -- 8 for uid(int64:str) of every accepted request, generated on client
+    -- some bytes spared for testing the most optimal size
+    local max_msg_size     = 65536 - 3 - 1 - 3 - 3 - 8 - 10518
+
     local lzma             = util.Compress
 
     local netlib_wstring   = net.WriteString
@@ -380,6 +381,13 @@ if CLIENT then
             ctemp[uid] = nil
 
             return
+        elseif _mode == 2 then
+            -- this may indicate the 'request' was not 'requested' in the form of a `req`, but a straight `frm`
+            stdout:append("request rejected(serverside temp not properly allocated)", true)
+
+            ctemp[uid] = nil
+
+            return
         end
 
         netlib_start("mdlstream_frm")
@@ -526,6 +534,9 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
         end
     end)
 else
+    -- consider ping difference if greater than this when sorting
+    local signifi_pingdiff = 20
+
     local delzma         = util.Decompress
     local str_find       = string.find
     local str_gmatch     = string.gmatch
@@ -588,8 +599,8 @@ else
     do local front, abs = nil, math.abs
         --- Sort based on ping and requested file size
         local function cmp(e1, e2)
-            if     abs(e1[3]:Ping() - e2[3]:Ping()) > 20 then return e1[3]:Ping() < e2[3]:Ping()
-            elseif e1[4] ~= e2[4]                        then return e1[4] < e2[4] end
+            if abs(e1[3]:Ping() - e2[3]:Ping()) > signifi_pingdiff then return e1[3]:Ping() < e2[3]:Ping()
+            elseif e1[4] ~= e2[4] then return e1[4] < e2[4] end
         end
 
         --- Do we have any ran tasks in queue but not removed?(unfinished)
@@ -603,7 +614,9 @@ else
             if #queue == 0 then return end
 
             --- It's unnecessary to deal with disconnected players' requests
-            for i = 1, #queue, -1 do if not isvalid(queue[i][3]) then tblib_remove(queue, i) end end
+            for i = 1, #queue, -1 do
+                if not isvalid(queue[i][3]) then tblib_remove(queue, i) end
+            end
 
             if #queue == 0 then return end
 
@@ -675,6 +688,20 @@ else
         local frame_type = netlib_ruintm()
         local content    = netlib_rbdata()
 
+        -- @EDGE_CASE
+        if not temp[uid] then
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(2)
+            netlib_wuint64(uid)
+            netlib_send(user)
+
+            return
+        end
+
+        -- time of last reply from client
+        -- TODO: make use of this
+        temp[uid][5] = systime()
+
         if frame_type == 200 then
             local bytes
 
@@ -722,9 +749,7 @@ else
             temp[uid][1][#temp[uid][1] + 1] = content
 
             netlib_start("mdlstream_ack")
-
             netlib_wuintm(101)
-
             netlib_wuint64(uid)
             netlib_wuint(netlib_ruint())
         end
