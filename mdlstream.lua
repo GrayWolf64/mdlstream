@@ -37,7 +37,7 @@ local flag_testing  = true
 local flag_noclui   = false
 local flag_allperm  = true
 local flag_keepobj  = false
-local flag_nohdrchk = true
+local flag_nohdrchk = false
 
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
@@ -201,54 +201,75 @@ if CLIENT then
         self:change_color(0, 0, 0, 225):AppendText(_s .. "\n")
     end
 
-    local mdl_determinant = {
-        versions = {
-            --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
-            -- 14 is used in "Half-Life SDK", too old
-            -- [2531] = true, [27] = true, [28] = true, [29] = true,
-            -- [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
-            [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
-            [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
-        }
-    }
-
-    local function rhdr_mdl_simple(_path)
-        local _file = file_open(_path, "rb", "GAME")
-
+    local function rhdr_mdl_simple(_file)
         local _h = {}
 
-        _h.id       = _file:ReadLong()
+        _h.id       = _file:Read(4)
         _h.version  = _file:ReadLong()
         _h.checksum = _file:ReadLong()
         _h.name     = _file:Read(64)
         _h.length   = _file:ReadLong()
 
-        _file:Close()
+        return _h
+    end
+
+    local function rhdr_vvd(_file)
+        local _h = {}
+
+        _h.id               = _file:Read(4)
+        _h.version          = _file:ReadLong()
+        _h.checksum         = _file:ReadLong()
+        _h.numlods          = _file:ReadLong()
+        _h.numlodvertexes   = _file:ReadLong()
+        _h.numfixups        = _file:ReadLong()
+        _h.fixuptablestart  = _file:ReadLong()
+        _h.vertexdatastart  = _file:ReadLong()
+        _h.tangentdatastart = _file:ReadLong()
 
         return _h
     end
 
+    local mdl_versions = {
+        --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
+        -- 14 is used in "Half-Life SDK", too old
+        -- [2531] = true, [27] = true, [28] = true, [29] = true,
+        -- [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
+        [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
+        [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
+    }
+
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
-    -- TODO: Currently, only mdl's header check is implemented
+    -- TODO: Currently, only mdl, vvd header check is implemented
     local function validate_header(_path)
         local _file = file_open(_path, "rb", "GAME")
 
-        if _file:Read(2) == "MZ" then return false end
+        if _file:Read(2) == "MZ" then
+            _file:Close()
+
+            return false
+        end
+
+        _file:Skip(-2)
+
+        local _ext = str_ext_fromfile(_path)
+        if _ext == "mdl" then
+            local studiohdr_t = rhdr_mdl_simple(_file)
+
+            if studiohdr_t.id     ~= "IDST" then return false end
+            if studiohdr_t.length ~= file_size(_path, "GAME") then return false end
+
+            if not mdl_versions[studiohdr_t.version] then return false end
+            if studiohdr_t.checksum <= 0 then return false end
+            if not studiohdr_t.name then return false end
+        elseif _ext == "vvd" then
+            local vertexFileHeader_t = rhdr_vvd(_file)
+
+            if vertexFileHeader_t.id ~= "IDSV" and vertexFileHeader_t.id ~= "IDCV" then return false end
+            if vertexFileHeader_t.version < 4 then return false end
+            if vertexFileHeader_t.checksum <= 0 then return false end
+        end
 
         _file:Close()
-
-        if str_ext_fromfile(_path) ~= "mdl" then return true end
-
-        local function hext_to_int(_t) return tonumber(str_fmt("0x%x%x%x%x", _t[4], _t[3], _t[2], _t[1])) end
-
-        local studiohdr_t = rhdr_mdl_simple(_path)
-
-        if studiohdr_t.id     ~= 1414743113 then return false end
-        if studiohdr_t.length ~= file_size(_path, "GAME") then return false end
-
-        if not mdl_determinant.versions[studiohdr_t.version] then return false end
-        if not studiohdr_t.checksum then return false end
-        if not studiohdr_t.name then return false end
 
         return true
     end
@@ -764,5 +785,8 @@ else
 end
 
 --- Test field(one player, local server)
+--
+-- TODO: optimize size of vvd to be sent
+--
 -- randomly generated text file with certain size(optimizations can't be applied to it other than lzma)
 -- 01:16:94 '8MiB.mdl', avg spd 109.02 KB/s, 2024/11/10
