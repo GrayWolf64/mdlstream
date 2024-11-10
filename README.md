@@ -15,6 +15,7 @@ If you are a client, your requests are all enqueued serverside, each request act
 
 In singleplayer, api is not enabled.
 
-# Future Plans
+# Plans(todos)
 
 Make the most of a single and slow `netchan`.
+*See the source code for detailed todos*.
