@@ -213,18 +213,12 @@ if CLIENT then
         return _h
     end
 
-    local function rhdr_vvd(_file)
+    local function rhdr_vvd_simple(_file)
         local _h = {}
 
         _h.id               = _file:Read(4)
         _h.version          = _file:ReadLong()
         _h.checksum         = _file:ReadLong()
-        _h.numlods          = _file:ReadLong()
-        _h.numlodvertexes   = _file:ReadLong()
-        _h.numfixups        = _file:ReadLong()
-        _h.fixuptablestart  = _file:ReadLong()
-        _h.vertexdatastart  = _file:ReadLong()
-        _h.tangentdatastart = _file:ReadLong()
 
         return _h
     end
@@ -262,7 +256,7 @@ if CLIENT then
             if studiohdr_t.checksum <= 0 then return false end
             if not studiohdr_t.name then return false end
         elseif _ext == "vvd" then
-            local vertexFileHeader_t = rhdr_vvd(_file)
+            local vertexFileHeader_t = rhdr_vvd_simple(_file)
 
             if vertexFileHeader_t.id ~= "IDSV" and vertexFileHeader_t.id ~= "IDCV" then return false end
             if vertexFileHeader_t.version < 4 then return false end
@@ -273,6 +267,84 @@ if CLIENT then
 
         return true
     end
+
+    local function align(offset, _a)
+        return math.floor((offset + _a - 1) / _a) * _a
+    end
+
+    -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/studiomdl/write.cpp#L67
+    local max_num_lods = 8
+    local max_num_bones_per_vert = 3
+    local function serialize_vvd(_f)
+        local data = {}
+        local t = ""
+
+        data = table.Merge(data, rhdr_vvd_simple(_f))
+
+        data.numlods = _f:ReadLong()
+
+        data.numlodvertexes = {}
+        for i = 1, max_num_lods do
+            data.numlodvertexes[i] = _f:ReadLong()
+        end
+
+        data.numfixups        = _f:ReadLong()
+        data.fixuptablestart  = _f:ReadLong()
+        data.vertexdatastart  = _f:ReadLong()
+        data.tangentdatastart = _f:ReadLong()
+
+        if data.numfixups > 0 then
+            _f:Seek(data.fixuptablestart)
+
+            data.fixups = {}
+
+            for i = 1, data.numfixups do
+                data.fixups[i] = {
+                    lodindex = _f:ReadLong(),
+                    vertexindex = _f:ReadLong(),
+                    numvertexes = _f:ReadLong()
+                }
+            end
+        end
+
+        -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/studiomdl/write.cpp#L1821
+        if data.numlods > 0 then
+            _f:Seek(data.vertexdatastart)
+
+            local boneweight
+            local pos
+            local normal
+            local texcoord
+            for i = 1, data.numlodvertexes[1] do
+                boneweight = {weight = {}, bone = {}}
+
+                for j = 1, max_num_bones_per_vert do
+                    boneweight.weight[j] = _f:ReadFloat()
+                end
+
+                for j = 1, max_num_bones_per_vert do
+                    boneweight.bone[j] = _f:ReadByte()
+                end
+
+                boneweight.numbones = _f:ReadByte()
+
+                pos      = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
+                normal   = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
+                texcoord = {_f:ReadFloat(), _f:ReadFloat()}
+            end
+
+            _f:Seek(data.tangentdatastart)
+
+            local tangent
+            for i = 1, data.numlodvertexes[1] do
+                tangent = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
+            end
+        end
+
+        return data
+    end
+
+    serialize_vvd(file_open("models/player/alyx.vvd", "rb", "GAME"))
 
     local function bytes_table(_path)
         local bt = {}
