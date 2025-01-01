@@ -268,9 +268,9 @@ if CLIENT then
         return true
     end
 
-    local function align(offset, _a)
-        return math.floor((offset + _a - 1) / _a) * _a
-    end
+    -- local function align(offset, _a)
+    --    return math.floor((offset + _a - 1) / _a) * _a
+    -- end
 
     -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/studiomdl/write.cpp#L67
     local max_num_lods = 8
@@ -344,7 +344,7 @@ if CLIENT then
         return data
     end
 
-    serialize_vvd(file_open("models/player/alyx.vvd", "rb", "GAME"))
+    PrintTable(serialize_vvd(file_open("models/player/alyx.vvd", "rb", "GAME")))
 
     local function bytes_table(_path)
         local bt = {}
