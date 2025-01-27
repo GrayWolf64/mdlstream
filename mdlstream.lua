@@ -36,7 +36,7 @@ mdlstream = {}
 local flag_testing  = true
 local flag_noclui   = false
 local flag_allperm  = true
-local flag_keepobj  = false
+local flag_keepobj  = true
 local flag_nohdrchk = false
 
 --- Shared konstants(not necessarily)
@@ -108,8 +108,6 @@ if CLIENT then
 
     local str_ext_fromfile = string.GetExtensionFromFilename
 
-    local util_t2json      = util.TableToJSON
-
     local fun_donothing    = function() end
 
     local realmax_msg_size = max_msg_size
@@ -125,64 +123,6 @@ if CLIENT then
         netlib_wuint(size)
         net.WriteData(str_sub(_bs, _start, _end), size)
     end
-
-    --- All the codes to represent a byte
-    -- "~", "^" for extension of representable range
-    local bs_codec = {
-        [1]  = "a", [2]  = "b", [3]  = "c", [4]  = "d", [5]  = "e", [6]  = "f", [7]  = "g", [8]  = "h",
-        [9]  = "i", [10] = "j", [11] = "k", [12] = "l", [13] = "m", [14] = "n", [15] = "o", [16] = "p",
-        [17] = "q", [18] = "r", [19] = "s", [20] = "t", [21] = "u", [22] = "v", [23] = "w", [24] = "x",
-        [25] = "y", [26] = "z",
-
-        [27] = "A", [28] = "B", [29] = "C", [30] = "D", [31] = "E", [32] = "F", [33] = "G", [34] = "H",
-        [35] = "I", [36] = "J", [37] = "K", [38] = "L", [39] = "M", [40] = "N", [41] = "O", [42] = "P",
-        [43] = "Q", [44] = "R", [45] = "S", [46] = "T", [47] = "U", [48] = "V", [49] = "W", [50] = "X",
-        [51] = "Y", [52] = "Z",
-
-        [53] = "0", [54] = "1", [55] = "2", [56] = "3", [57] = "4",
-        [58] = "5", [59] = "6", [60] = "7", [61] = "8", [62] = "9",
-
-        [63] = "!", [64] = "\"", [65] = "#", [66] = "$", [67] = "%", [68] = "&", [69] = "'", [70] = "(",
-        [71] = ")", [72] = "*",  [73] = "+", [74] = ",", [75] = "-", [76] = ".", [77] = "/", [78] = ":",
-        [79] = ";", [80] = "<",  [81] = "=", [82] = ">", [83] = "?", [84] = "@", [85] = "[", [86] = "\\",
-        [87] = "]", [88] = "_",  [89] = "`", [90] = "{", [91] = "|", [92] = "}",
-
-
-        [93]  = "~a", [94]  = "~b", [95]  = "~c", [96]  = "~d", [97]  = "~e", [98]  = "~f", [99]  = "~g",
-        [100] = "~h", [101] = "~i", [102] = "~j", [103] = "~k", [104] = "~l", [105] = "~m", [106] = "~n",
-        [107] = "~o", [108] = "~p", [109] = "~q", [110] = "~r", [111] = "~s", [112] = "~t", [113] = "~u",
-        [114] = "~v", [115] = "~w", [116] = "~x", [117] = "~y", [118] = "~z",
-
-        [119] = "~A", [120] = "~B", [121] = "~C", [122] = "~D", [123] = "~E", [124] = "~F", [125] = "~G",
-        [126] = "~H", [127] = "~I", [128] = "~J", [129] = "~K", [130] = "~L", [131] = "~M", [132] = "~N",
-        [133] = "~O", [134] = "~P", [135] = "~Q", [136] = "~R", [137] = "~S", [138] = "~T", [139] = "~U",
-        [140] = "~V", [141] = "~W", [142] = "~X", [143] = "~Y", [144] = "~Z",
-
-        [145] = "~0", [146] = "~1", [147] = "~2", [148] = "~3", [149] = "~4",
-        [150] = "~5", [151] = "~6", [152] = "~7", [153] = "~8", [154] = "~9",
-
-        [155] = "~!", [156] = "~\"", [157] = "~#", [158] = "~$", [159] = "~%", [160] = "~&", [161] = "~'",
-        [162] = "~(", [163] = "~)",  [164] = "~*", [165] = "~+", [166] = "~,", [167] = "~-", [168] = "~.",
-        [169] = "~/", [170] = "~:",  [171] = "~;", [172] = "~<", [173] = "~=", [174] = "~>",
-
-
-        [175] = "^a", [176] = "^b", [177] = "^c", [178] = "^d", [179] = "^e", [180] = "^f", [181] = "^g",
-        [182] = "^h", [183] = "^i", [184] = "^j", [185] = "^k", [186] = "^l", [187] = "^m", [188] = "^n",
-        [189] = "^o", [190] = "^p", [191] = "^q", [192] = "^r", [193] = "^s", [194] = "^t", [195] = "^u",
-        [196] = "^v", [197] = "^w", [198] = "^x", [199] = "^y", [200] = "^z",
-
-        [201] = "^A", [202] = "^B", [203] = "^C", [204] = "^D", [205] = "^E", [206] = "^F", [207] = "^G",
-        [208] = "^H", [209] = "^I", [210] = "^J", [211] = "^K", [212] = "^L", [213] = "^M", [214] = "^N",
-        [215] = "^O", [216] = "^P", [217] = "^Q", [218] = "^R", [219] = "^S", [220] = "^T", [221] = "^U",
-        [222] = "^V", [223] = "^W", [224] = "^X", [225] = "^Y", [226] = "^Z",
-
-        [227] = "^0", [228] = "^1", [229] = "^2", [230] = "^3", [231] = "^4",
-        [232] = "^5", [233] = "^6", [234] = "^7", [235] = "^8", [236] = "^9",
-
-        [237] = "^!", [238] = "^\"", [239] = "^#", [240] = "^$", [241] = "^%", [242] = "^&", [243] = "^'",
-        [244] = "^(", [245] = "^)",  [246] = "^*", [247] = "^+", [248] = "^,", [249] = "^-", [250] = "^.",
-        [251] = "^/", [252] = "^:",  [253] = "^;", [254] = "^<", [255] = "^=", [256] = "^>"
-    }
 
     local stdout = stdout or vgui.Create("RichText") stdout:Hide()
     stdout.PerformLayout = function(self) self:SetFontInternal("DebugFixed") end
@@ -268,141 +208,6 @@ if CLIENT then
         return true
     end
 
-    -- local function align(offset, _a)
-    --    return math.floor((offset + _a - 1) / _a) * _a
-    -- end
-
-    -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/studiomdl/write.cpp#L67
-    local max_num_lods = 8
-    local max_num_bones_per_vert = 3
-    local function serialize_vvd(_f)
-        local data = {}
-        local t = ""
-
-        data = table.Merge(data, rhdr_vvd_simple(_f))
-
-        data.numlods = _f:ReadLong()
-
-        data.numlodvertexes = {}
-        for i = 1, max_num_lods do
-            data.numlodvertexes[i] = _f:ReadLong()
-        end
-
-        data.numfixups        = _f:ReadLong()
-        data.fixuptablestart  = _f:ReadLong()
-        data.vertexdatastart  = _f:ReadLong()
-        data.tangentdatastart = _f:ReadLong()
-
-        if data.numfixups > 0 then
-            _f:Seek(data.fixuptablestart)
-
-            data.fixups = {}
-
-            for i = 1, data.numfixups do
-                data.fixups[i] = {
-                    lodindex = _f:ReadLong(),
-                    vertexindex = _f:ReadLong(),
-                    numvertexes = _f:ReadLong()
-                }
-            end
-        end
-
-        -- https://github.com/RaphaelIT7/sourcesdk-gmod/blob/313ac36bded1d9ae1b74fcbdf0f5d780c3b6fabc/utils/studiomdl/write.cpp#L1821
-        if data.numlods > 0 then
-            _f:Seek(data.vertexdatastart)
-
-            local boneweight
-            local pos
-            local normal
-            local texcoord
-            for i = 1, data.numlodvertexes[1] do
-                boneweight = {weight = {}, bone = {}}
-
-                for j = 1, max_num_bones_per_vert do
-                    boneweight.weight[j] = _f:ReadFloat()
-                end
-
-                for j = 1, max_num_bones_per_vert do
-                    boneweight.bone[j] = _f:ReadByte()
-                end
-
-                boneweight.numbones = _f:ReadByte()
-
-                pos      = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
-                normal   = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
-                texcoord = {_f:ReadFloat(), _f:ReadFloat()}
-            end
-
-            _f:Seek(data.tangentdatastart)
-
-            local tangent
-            for i = 1, data.numlodvertexes[1] do
-                tangent = {_f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()}
-            end
-        end
-
-        return data
-    end
-
-    PrintTable(serialize_vvd(file_open("models/player/alyx.vvd", "rb", "GAME")))
-
-    local function bytes_table(_path)
-        local bt = {}
-
-        local _file = file_open(_path, "rb", "GAME")
-
-        for i = 1, math.huge do
-            if cfile_eof(_file) then break end
-
-            bt[i] = cfile_rbyte(_file)
-        end
-
-        _file:Close()
-
-        return bt
-    end
-
-    local function optimal_map(_bytes)
-        local freq = {}
-        for i = 0, 255 do freq[i] = 0 end
-
-        local byte
-        for i = 1, #_bytes do
-            byte = _bytes[i]
-            freq[byte] = freq[byte] + 1
-        end
-
-        local sortable = {}
-
-        for i = 0, 255 do
-            sortable[i + 1] = {[1] = i, [2] = freq[i]}
-        end
-
-        tblib_sort(sortable, function(e1, e2) return e1[2] > e2[2] end)
-
-        local map = {}
-        for i = 1, 256 do
-            map[sortable[i][1]] = bs_codec[i]
-        end
-
-        return map
-    end
-
-    local function encode(_map, _bt)
-        local chars = {}
-        local byte
-
-        for i = 1, #_bt do
-            byte = _bt[i]
-            chars[#chars + 1] = _map[byte]
-        end
-
-        local res = lzma(tblib_concat(chars))
-        if flag_testing then stdout:append(str_fmt("encoded len: %i", #res), true) end
-
-        return res
-    end
-
     local function uidgen() return string.gsub(tostring(systime()), "%.", "", 1) end
 
     local ctemp = ctemp or {}
@@ -425,22 +230,16 @@ if CLIENT then
 
         local uid = uidgen()
 
-        local bytes = bytes_table(path)
-        local map   = optimal_map(bytes)
-
         --- FIXME: actual size reduction needed
-        -- e.g. alyx.mdl #
-        -- file.Read + lzma:                                 292884, should just use this?
-        -- file.ReadByte + bytes_table + optimal_map + lzma: 340967 (now using)
-        -- file.ReadByte + bytes_table + bs_codec + lzma:    334957, shorter than optimal???
-
-        ctemp[uid] = {[1] = encode(map, bytes), [2] = path, [3] = callback}
+        -- e.g. alyx.mdl
+        -- file.Read + lzma + base64: 390512
+        ctemp[uid] = {[1] = util.Base64Encode(lzma(file.Read(path, "GAME")), true), [2] = path, [3] = callback}
+        print(#ctemp[uid][1])
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
         netlib_wuint64(uid)
         netlib_wstring(tostring(size))
-        netlib_wbdata(lzma(util_t2json(map)), 1)
         netlib_toserver()
     end
 
@@ -644,8 +443,6 @@ else
     local netlib_rdata   = net.ReadData
     local netlib_rbdata  = function() return net.ReadData(netlib_ruint()) end
 
-    local util_json2t    = util.JSONToTable
-
     local cfile_wbyte    = FindMetaTable("File").WriteByte
 
     util.AddNetworkString"mdlstream_req"
@@ -653,8 +450,7 @@ else
     util.AddNetworkString"mdlstream_ack" -- Acknowledge
 
     --- I don't want to go oop here, though it may be more elegant
-    local temp = temp or {}
-
+    local temp  = temp or {}
     local queue = queue or {}
 
     netlib_set_receiver("mdlstream_req", function(_, user)
@@ -663,7 +459,6 @@ else
         local _path = netlib_rstring()
         local uid   = netlib_ruint64()
         local size  = tonumber(netlib_rstring())
-        local map   = table.Flip(util_json2t(delzma(netlib_rbdata())))
 
         if flag_testing then goto no_existence_chk end
 
@@ -683,7 +478,7 @@ else
 
             netlib_wuintm(100)
 
-            temp[uid] = {[1] = {}, [2] = _path, [3] = systime(), [4] = map}
+            temp[uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
             netlib_wuint64(uid)
 
@@ -769,16 +564,6 @@ else
         return path_gma
     end
 
-    local function ctb(_s, _map)
-        local _bytes = {}
-
-        for token in str_gmatch(_s, "([%~%^]?[^%~%^%s%c%z])") do
-            _bytes[#_bytes + 1] = _map[token]
-        end
-
-        return _bytes
-    end
-
     -- TODO: ensure file save failure got dealt with
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
@@ -801,14 +586,14 @@ else
         temp[uid][5] = systime()
 
         if frame_type == 200 then
-            local bytes
+            local str
 
             if #temp[uid][1] == 0 then
-                bytes = ctb(delzma(content), temp[uid][4])
+                str = delzma(util.Base64Decode(content))
             else
                 temp[uid][1][#temp[uid][1] + 1] = content
 
-                bytes = ctb(delzma(tblib_concat(temp[uid][1])), temp[uid][4])
+                str = delzma(util.Base64Decode(tblib_concat(temp[uid][1])))
             end
 
             local path = temp[uid][2]
@@ -818,11 +603,7 @@ else
             file.CreateDir(string.GetPathFromFilename(path))
 
             local _file = file_open(path, "wb", "DATA")
-
-            for i = 1, #bytes do
-                cfile_wbyte(_file, bytes[i])
-            end
-
+            _file:Write(str)
             _file:Close()
 
             local _path_gma = string.StripExtension(wgma(path, file.Read(path, "DATA"), uid))
@@ -831,9 +612,16 @@ else
 
             local dt = systime() - temp[uid][3]
 
-            print(str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
-                string.FormattedTime(dt, "%02i:%02i:%02i"), path,
-                user:SteamID64(), string.NiceSize(file_size(_path_gma .. Either(flag_keepobj, "", ".gma"), "DATA") / dt)))
+            print(
+                str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
+                    string.FormattedTime(dt, "%02i:%02i:%02i"),
+                    path,
+                    user:SteamID64(),
+                    string.NiceSize(
+                        file_size(flag_keepobj and path or _path_gma .. ".gma", "DATA") / dt
+                    )
+                )
+            )
 
             temp[uid] = nil
 
@@ -855,10 +643,3 @@ else
         netlib_send(user)
     end)
 end
-
---- Test field(one player, local server)
---
--- TODO: optimize size of vvd to be sent
---
--- randomly generated text file with certain size(optimizations can't be applied to it other than lzma)
--- 01:16:94 '8MiB.mdl', avg spd 109.02 KB/s, 2024/11/10
