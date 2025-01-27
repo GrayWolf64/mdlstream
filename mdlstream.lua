@@ -168,8 +168,8 @@ if CLIENT then
         -- 14 is used in "Half-Life SDK", too old
         -- [2531] = true, [27] = true, [28] = true, [29] = true,
         -- [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
-        [44]   = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
-        [52]   = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
+        [44] = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
+        [52] = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
     }
 
     --- https://github.com/Tieske/pe-parser/blob/master/src/pe-parser.lua
@@ -189,7 +189,7 @@ if CLIENT then
         if _ext == "mdl" then
             local studiohdr_t = rhdr_mdl_simple(_file)
 
-            if studiohdr_t.id     ~= "IDST" then return false end
+            if studiohdr_t.id ~= "IDST" then return false end
             if studiohdr_t.length ~= file_size(_path, "GAME") then return false end
 
             if not mdl_versions[studiohdr_t.version] then return false end
@@ -398,7 +398,7 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
             self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
         end
 
-        -- TODO: use regex to parse
+        -- TODO: make it more stable
         local cmds = {
             request   = function(_s)
                 if LocalPlayer():IsAdmin() or flag_allperm then
