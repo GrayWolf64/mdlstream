@@ -234,7 +234,6 @@ if CLIENT then
         -- e.g. alyx.mdl
         -- file.Read + lzma + base64: 390512
         ctemp[uid] = {[1] = util.Base64Encode(lzma(file.Read(path, "GAME")), true), [2] = path, [3] = callback}
-        print(#ctemp[uid][1])
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
