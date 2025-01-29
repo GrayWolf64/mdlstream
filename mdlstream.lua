@@ -42,9 +42,10 @@ local flag_nohdrchk = false
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
 --
-local tonumber            = tonumber
-local isvalid             = IsValid
-local systime             = SysTime
+local tonumber = tonumber
+local isvalid  = IsValid
+local systime  = SysTime
+local sqrt     = math.sqrt
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -61,6 +62,14 @@ local netlib_ruint        = function() return net.ReadUInt(24) end
 --   0: Server has refused request(file already exists on server)
 --   1: Server has built file and sends an ack for finalization
 --   2: Server has refused request, whose serverside temp isn't allocated properly ahead of time
+--
+--  91: Server requests client to send vvd data type sequence
+--  92: Client sends vvd data type seq
+--  10: Server has received vvd data type seq and awaits data
+--  11: Server awaits subsequent vvd data
+--  93: similar to 200, but for vvd
+--  94: similar to 201, but for vvd
+--
 -- 100: Server has accepted Client's request, awaits the first frame
 -- 101: Server awaits subsequent frame
 -- 200: Client sends a frame that can be received and built on Server using previously received frames or
@@ -88,6 +97,98 @@ local file_open           = function(_f, _m, _p)
 end
 
 if CLIENT then
+    --- https://aras-p.info/texts/CompactNormalStorage.html
+    local function encode_normal(x, y, z)
+        local f = sqrt(8 * z + 8)
+
+        return x / f + 0.5, y / f + 0.5
+    end
+
+    local function make_vvd_data_seq(_f)
+        local data = {}
+        local seq = {}
+
+        -- f: float, l: long, b: byte, s: string, F: 1 or -1 but is float, c: calculated
+        local counts = {f = 0, l = 0, b = 0, s = 0, F = 0, c = 0}
+
+        local function reader(type_str, type_char, p1)
+            return function()
+                data[#data + 1] = _f["Read" .. type_str](_f, p1)
+                seq[#seq + 1] = type_char
+                counts[type_char] = counts[type_char] + 1
+                return data[#data]
+            end
+        end
+
+        local function read_normal()
+            local x0, y0, z0 = _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()
+            local x1, y1 = encode_normal(x0, y0, z0)
+
+            data[#data + 1] = x1 seq[#seq + 1] = "f" counts.f = counts.f + 1
+            data[#data + 1] = y1 seq[#seq + 1] = "f" counts.f = counts.f + 1
+            data[#data + 1] = 0 seq[#seq + 1] = "c" counts.c = counts.c + 1
+
+            x0, y0, z0, x1, y1 = nil, nil, nil, nil, nil
+        end
+
+        local float = reader("Float", "f")
+        local float0 = reader("Float", "F")
+        local long = reader("Long", "l")
+        local byte = reader("Byte", "b")
+        local str4 = reader("", "s", 4)
+
+        str4()
+
+        long() long()
+
+        local numlods = long()
+
+        local numlodvertexes0 = long()
+        long() long() long() long() long() long() long()
+
+        local numfixups = long()
+        local fixuptablestart = long()
+        local vertexdatastart = long()
+        local tangentdatastart = long()
+
+        if numfixups > 0 then
+            _f:Seek(fixuptablestart)
+
+            for _ = 1, numfixups do
+                long() long() long()
+            end
+        end
+
+        if numlods > 0 then
+            _f:Seek(vertexdatastart)
+
+            for _ = 1, numlodvertexes0 do
+                float() float() float()
+
+                byte() byte() byte()
+
+                byte()
+
+                float() float() float()
+
+                -- normals
+                read_normal()
+
+                float() float()
+            end
+        end
+
+        _f:Seek(tangentdatastart)
+
+        for _ = 1, numlodvertexes0 do
+            -- tangents
+            read_normal()
+            float0()
+        end
+
+        return {data, seq, counts}
+    end
+
     -- FRAME content:
     -- 3 spared for engine use
     -- 1 for determining the response mode
@@ -153,16 +254,6 @@ if CLIENT then
         return _h
     end
 
-    local function rhdr_vvd_simple(_file)
-        local _h = {}
-
-        _h.id               = _file:Read(4)
-        _h.version          = _file:ReadLong()
-        _h.checksum         = _file:ReadLong()
-
-        return _h
-    end
-
     local mdl_versions = {
         --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
         -- 14 is used in "Half-Life SDK", too old
@@ -196,7 +287,11 @@ if CLIENT then
             if studiohdr_t.checksum <= 0 then return false end
             if not studiohdr_t.name then return false end
         elseif _ext == "vvd" then
-            local vertexFileHeader_t = rhdr_vvd_simple(_file)
+            local vertexFileHeader_t = {
+                id       = _file:Read(4),
+                version  = _file:ReadLong(),
+                checksum = _file:ReadLong()
+            }
 
             if vertexFileHeader_t.id ~= "IDSV" and vertexFileHeader_t.id ~= "IDCV" then return false end
             if vertexFileHeader_t.version < 4 then return false end
@@ -214,9 +309,10 @@ if CLIENT then
 
     -- TODO: clientside postpone frame dispatch when ping too high/unstable, and a state machine serverside
     local function send_request(path, callback)
-        assert(isstring(path),                       mstr"'path' is not a string")
-        assert(file.Exists(path, "GAME"),            mstr"Desired filepath does not exist on client, " .. path)
-        assert(file_formats[str_ext_fromfile(path)], mstr"Tries to send unsupported file, "            .. path)
+        local ext = str_ext_fromfile(path)
+        assert(isstring(path),            mstr"'path' is not a string")
+        assert(file.Exists(path, "GAME"), mstr"Desired filepath does not exist on client, " .. path)
+        assert(file_formats[ext],         mstr"Tries to send unsupported file, "            .. path)
 
         local size = file_size(path, "GAME")
 
@@ -231,9 +327,11 @@ if CLIENT then
         local uid = uidgen()
 
         --- FIXME: actual size reduction needed
-        -- e.g. alyx.mdl
-        -- file.Read + lzma + base64: 390512
-        ctemp[uid] = {[1] = util.Base64Encode(lzma(file.Read(path, "GAME")), true), [2] = path, [3] = callback}
+        if ext == "vvd" then
+            ctemp[uid] = {[1] = make_vvd_data_seq(file.Open(path, "rb", "GAME")), [2] = path, [3] = callback}
+        else
+            ctemp[uid] = {[1] = util.Base64Encode(lzma(file.Read(path, "GAME")), true), [2] = path, [3] = callback}
+        end
 
         netlib_start("mdlstream_req")
         netlib_wstring(path)
@@ -258,6 +356,24 @@ if CLIENT then
     end
 
     local function w_framemode(_exceeds) if not _exceeds then netlib_wuintm(200) else netlib_wuintm(201) end end
+    local function w_framemode_vvd(_exceeds) if not _exceeds then netlib_wuintm(93) else netlib_wuintm(94) end end
+
+    local writers_vvd_data = {
+        f = function(v) net.WriteFloat(v) end,
+        l = function(v) net.WriteInt(v, 32) end,
+        b = function(v) netlib_wuintm(v) end,
+        s = function(v) netlib_wstring(v) end,
+        F = function(v) net.WriteBit(v == 1) end,
+        c = function() end
+    }
+    local sizes = {
+        f = 4,
+        l = 4,
+        b = 1,
+        s = 4,
+        F = 0.125,
+        c = 0
+    }
 
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_ack", function()
@@ -292,32 +408,103 @@ if CLIENT then
 
         adjust_max_msg_size()
 
-        local _bs = ctemp[uid][1]
+        if _mode == 91 then
+            netlib_wuintm(92)
+            netlib_wbdata(lzma(tblib_concat(ctemp[uid][1][2])), 1)
+            netlib_toserver()
+
+            return
+        end
+
+        local data = ctemp[uid][1]
+
+        local seq
+        if _mode == 10 or _mode == 11 then
+            data, seq = ctemp[uid][1][1], ctemp[uid][1][2]
+        end
 
         --- May better simplify section below
         local exceeds_max, pos
-        if _mode == 100 then
-            exceeds_max = #_bs > realmax_msg_size
+        if _mode == 10 then
+            local counts = ctemp[uid][1][3]
+            local actual_size = counts.f * sizes.f + counts.l * sizes.l + counts.b + counts.s * sizes.s + counts.F * sizes.F
+
+            exceeds_max = actual_size > realmax_msg_size
+            w_framemode_vvd(exceeds_max)
+            if not exceeds_max then
+                netlib_wuint(1)
+                for k, v in ipairs(seq) do
+                    writers_vvd_data[v](data[k])
+                end
+            else
+                local bytes_written = 0
+
+                for k, v in ipairs(seq) do
+                    if bytes_written >= realmax_msg_size - 8 then pos = k break end
+
+                    bytes_written = bytes_written + sizes[v]
+                end
+
+                netlib_wuint(1)
+                netlib_wuint(pos)
+
+                for k, v in ipairs(seq) do
+                    if k == pos then break end
+                    writers_vvd_data[v](data[k])
+                end
+            end
+        elseif _mode == 11 then
+            pos = netlib_ruint()
+
+            local actual_size = 0
+            for i = pos, #seq do
+                actual_size = actual_size + sizes[seq[i]]
+            end
+            exceeds_max = actual_size > realmax_msg_size
+            w_framemode_vvd(exceeds_max)
+            if not exceeds_max then
+                netlib_wuint(pos)
+                for i = pos, #seq do
+                    writers_vvd_data[seq[i]](data[i])
+                end
+            else
+                local endpos
+                local bytes_written = 0
+                for i = pos, #seq do
+                    if bytes_written >= realmax_msg_size - 8 then endpos = i break end
+                    bytes_written = bytes_written + sizes[seq[i]]
+                end
+
+                netlib_wuint(pos)
+                netlib_wuint(endpos)
+
+                for i = pos, endpos - 1 do
+                    writers_vvd_data[seq[i]](data[i])
+                end
+            end
+
+        elseif _mode == 100 then
+            exceeds_max = #data > realmax_msg_size
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                netlib_wbdata(_bs, 1, nil)
+                netlib_wbdata(data, 1, nil)
             else
-                netlib_wbdata(_bs, 1, realmax_msg_size)
+                netlib_wbdata(data, 1, realmax_msg_size)
                 netlib_wuint(realmax_msg_size)
             end
         elseif _mode == 101 then
             pos         = netlib_ruint()
-            exceeds_max = #_bs - pos > realmax_msg_size
+            exceeds_max = #data - pos > realmax_msg_size
 
             w_framemode(exceeds_max)
 
             if not exceeds_max then
-                netlib_wbdata(_bs, pos + 1, nil)
+                netlib_wbdata(data, pos + 1, nil)
             else
                 local _endpos = pos + realmax_msg_size
 
-                netlib_wbdata(_bs, pos + 1, _endpos)
+                netlib_wbdata(data, pos + 1, _endpos)
                 netlib_wuint(_endpos)
             end
         end
@@ -327,10 +514,12 @@ if CLIENT then
         local filename = ctemp[uid][2]
 
         if exceeds_max then
-            if _mode == 100 then
+            if _mode == 100 or _mode == 10 then
                 stdout:append("starting frame sent: " .. filename, true)
-            elseif _mode == 101 then
-                stdout:append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #_bs) * 100)), true)
+            elseif _mode == 101 or _mode == 11 then
+                stdout:append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #data) * 100)), true)
+            elseif _mode == 91 then
+                stdout:append("type sequence sent: " .. filename, true)
             end
         else
             if _mode == 100 or _mode == 101 then stdout:append("last frame sent: " .. filename, true) end
@@ -475,7 +664,11 @@ else
         local function action()
             netlib_start("mdlstream_ack")
 
-            netlib_wuintm(100)
+            if string.GetExtensionFromFilename(_path) == "vvd" then
+                netlib_wuintm(91)
+            else
+                netlib_wuintm(100)
+            end
 
             temp[uid] = {[1] = {}, [2] = _path, [3] = systime()}
 
@@ -563,12 +756,46 @@ else
         return path_gma
     end
 
+    local readers_vvd_data = {
+        f = function() return net.ReadFloat() end,
+        l = function() return net.ReadInt(32) end,
+        b = function() return netlib_ruintm() end,
+        s = function() return netlib_rstring() end,
+        F = function() return net.ReadBit() and 1 or -1 end,
+        c = function() return 0 end
+    }
+
+    local function decode_normal(x, y)
+        local fenc = {x * 4 - 2, y * 4 - 2}
+        local f = fenc[1] * fenc[1] + fenc[2] * fenc[2]
+        local g = sqrt(1 - f / 4)
+
+        return fenc[1] * g, fenc[2] * g, 1 - f / 2
+    end
+
+    local writers_vvd_data = {
+        f = function(_f, v) _f:WriteFloat(v) end,
+        l = function(_f, v) _f:WriteLong(v) end,
+        b = function(_f, v) _f:WriteByte(v) end,
+        s = function(_f, v) _f:Write(v) end,
+        F = function(_f, v) if v == 1 then v = 1 else v = -1 end _f:WriteFloat(v) end,
+        c = function(_f, _, data, i)
+            local x, y, z = data[i - 2], data[i - 1], nil
+            x, y, z = decode_normal(x, y)
+            _f:WriteFloat(x) _f:WriteFloat(y) _f:WriteFloat(z)
+        end
+    }
+
     -- TODO: ensure file save failure got dealt with
     -- @BUFFER_SENSITIVE
     netlib_set_receiver("mdlstream_frm", function(_, user)
         local uid        = netlib_ruint64()
         local frame_type = netlib_ruintm()
-        local content    = netlib_rbdata()
+
+        local content
+        if frame_type ~= 93 and frame_type ~= 94 then
+            content = netlib_rbdata()
+        end
 
         -- @EDGE_CASE
         if not temp[uid] then
@@ -580,11 +807,47 @@ else
             return
         end
 
-        -- time of last reply from client
-        -- TODO: make use of this
-        temp[uid][5] = systime()
+        local path, path_gma
 
-        if frame_type == 200 then
+        if frame_type == 93 or frame_type == 200 then
+            path = temp[uid][2]
+            if str_startswith(path, "data/") then path = str_sub(path, 6) end
+            file.CreateDir(string.GetPathFromFilename(path))
+        end
+
+        if frame_type == 92 then
+            temp[uid][5] = string.ToTable(delzma(content))
+
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(10)
+            netlib_wuint64(uid)
+        elseif frame_type == 93 then
+            local startpos = netlib_ruint()
+
+            for i = startpos, #temp[uid][5] do
+                temp[uid][1][#temp[uid][1] + 1] = readers_vvd_data[temp[uid][5][i]]()
+            end
+
+            local _file = file_open(path, "wb", "DATA")
+
+            for k, v in ipairs(temp[uid][1]) do
+                writers_vvd_data[temp[uid][5][k]](_file, v, temp[uid][1], k)
+            end
+
+            _file:Close()
+        elseif frame_type == 94 then
+            local startpos = netlib_ruint()
+            local endpos = netlib_ruint()
+
+            for i = startpos, endpos - 1 do
+                temp[uid][1][#temp[uid][1] + 1] = readers_vvd_data[temp[uid][5][i]]()
+            end
+
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(11)
+            netlib_wuint64(uid)
+            netlib_wuint(endpos)
+        elseif frame_type == 200 then
             local str
 
             if #temp[uid][1] == 0 then
@@ -595,29 +858,31 @@ else
                 str = delzma(util.Base64Decode(tblib_concat(temp[uid][1])))
             end
 
-            local path = temp[uid][2]
-
-            if str_startswith(path, "data/") then path = str_sub(path, 6) end
-
-            file.CreateDir(string.GetPathFromFilename(path))
-
             local _file = file_open(path, "wb", "DATA")
             _file:Write(str)
             _file:Close()
+        elseif frame_type == 201 then
+            temp[uid][1][#temp[uid][1] + 1] = content
 
-            local _path_gma = string.StripExtension(wgma(path, file.Read(path, "DATA"), uid))
+            netlib_start("mdlstream_ack")
+            netlib_wuintm(101)
+            netlib_wuint64(uid)
+            netlib_wuint(netlib_ruint())
+        end
+
+        if frame_type == 93 or frame_type == 200 then
+            path_gma = string.StripExtension(wgma(path, file.Read(path, "DATA"), uid))
 
             if not flag_keepobj then file.Delete(path, "DATA") end
 
             local dt = systime() - temp[uid][3]
-
             print(
                 str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
                     string.FormattedTime(dt, "%02i:%02i:%02i"),
                     path,
                     user:SteamID64(),
                     string.NiceSize(
-                        file_size(flag_keepobj and path or _path_gma .. ".gma", "DATA") / dt
+                        file_size(flag_keepobj and path or path_gma .. ".gma", "DATA") / dt
                     )
                 )
             )
@@ -630,13 +895,6 @@ else
             netlib_start("mdlstream_ack")
             netlib_wuintm(1)
             netlib_wuint64(uid)
-        elseif frame_type == 201 then
-            temp[uid][1][#temp[uid][1] + 1] = content
-
-            netlib_start("mdlstream_ack")
-            netlib_wuintm(101)
-            netlib_wuint64(uid)
-            netlib_wuint(netlib_ruint())
         end
 
         netlib_send(user)
