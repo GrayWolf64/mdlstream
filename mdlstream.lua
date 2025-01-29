@@ -42,10 +42,14 @@ local flag_nohdrchk = false
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
 --
-local tonumber = tonumber
-local isvalid  = IsValid
-local systime  = SysTime
-local sqrt     = math.sqrt
+local tonumber   = tonumber
+local isvalid    = IsValid
+local systime    = SysTime
+local math_sqrt  = math.sqrt
+local math_pi    = math.pi
+local math_max   = math.max
+local math_min   = math.min
+local math_floor = math.floor
 
 local netlib_set_receiver = net.Receive
 local netlib_start        = net.Start
@@ -96,14 +100,45 @@ local file_open           = function(_f, _m, _p)
     return __f
 end
 
+--- https://www.codeproject.com/Articles/5366994/16bit-Normal-Vectors-Compression-using-Spherical-C
+-- Thanks to DeepSeek r1 and me!
+local B_THETA, B_PHI = 12, 12
+local packed_normal_bits = B_THETA + B_PHI
+
+local function encode_normal(x, y, z)
+    local len = math_sqrt(x * x + y * y + z * z) + 1e-7
+    x, y, z = x / len, y / len, z / len
+
+    local MAX_THETA = bit.lshift(1, B_THETA) - 1
+    local MAX_PHI = bit.lshift(1, B_PHI) - 1
+
+    local quant_theta = math_floor((0.5 - 0.5 * z) * (MAX_THETA + 1) + 0.5)
+    quant_theta = math_max(0, math_min(quant_theta, MAX_THETA))
+
+    local phi = math.atan2(y, x)
+    phi = (phi < 0) and (phi + 2 * math_pi) or phi
+    local quant_phi = math_floor(phi / (2 * math_pi) * (MAX_PHI + 1) + 0.5) % (MAX_PHI + 1)
+
+    return bit.bor(bit.lshift(quant_theta, B_PHI), quant_phi)
+end
+
+local function decode_normal(packed)
+    local MAX_THETA = bit.lshift(1, B_THETA) - 1
+    local MAX_PHI = bit.lshift(1, B_PHI) - 1
+
+    local quant_theta = bit.band(bit.rshift(packed, B_PHI), MAX_THETA)
+    local quant_phi = bit.band(packed, MAX_PHI)
+
+    local cos_theta = 1 - (2 * (quant_theta + 0.5)) / (MAX_THETA + 1)
+    cos_theta = math_max(-1, math_min(1, cos_theta))
+    local phi = (quant_phi + 0.5) * (2 * math_pi) / (MAX_PHI + 1)
+
+    local sin_theta = math_sqrt(1 - cos_theta * cos_theta)
+
+    return sin_theta * math.cos(phi), sin_theta * math.sin(phi), cos_theta
+end
+
 if CLIENT then
-    --- https://aras-p.info/texts/CompactNormalStorage.html
-    local function encode_normal(x, y, z)
-        local f = sqrt(8 * z + 8)
-
-        return x / f + 0.5, y / f + 0.5
-    end
-
     local function make_vvd_data_seq(_f)
         local data = {}
         local seq = {}
@@ -122,13 +157,10 @@ if CLIENT then
 
         local function read_normal()
             local x0, y0, z0 = _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()
-            local x1, y1 = encode_normal(x0, y0, z0)
+            local packed = encode_normal(x0, y0, z0)
+            data[#data + 1] = packed seq[#seq + 1] = "c" counts.c = counts.c + 1
 
-            data[#data + 1] = x1 seq[#seq + 1] = "f" counts.f = counts.f + 1
-            data[#data + 1] = y1 seq[#seq + 1] = "f" counts.f = counts.f + 1
-            data[#data + 1] = 0 seq[#seq + 1] = "c" counts.c = counts.c + 1
-
-            x0, y0, z0, x1, y1 = nil, nil, nil, nil, nil
+            x0, y0, z0 = nil, nil, nil
         end
 
         local float = reader("Float", "f")
@@ -364,7 +396,7 @@ if CLIENT then
         b = function(v) netlib_wuintm(v) end,
         s = function(v) netlib_wstring(v) end,
         F = function(v) net.WriteBit(v == 1) end,
-        c = function() end
+        c = function(v) net.WriteUInt(v, packed_normal_bits) end
     }
     local sizes = {
         f = 4,
@@ -372,7 +404,7 @@ if CLIENT then
         b = 1,
         s = 4,
         F = 0.125,
-        c = 0
+        c = packed_normal_bits / 8
     }
 
     -- @BUFFER_SENSITIVE
@@ -762,16 +794,8 @@ else
         b = function() return netlib_ruintm() end,
         s = function() return netlib_rstring() end,
         F = function() return net.ReadBit() and 1 or -1 end,
-        c = function() return 0 end
+        c = function() return net.ReadUInt(packed_normal_bits) end
     }
-
-    local function decode_normal(x, y)
-        local fenc = {x * 4 - 2, y * 4 - 2}
-        local f = fenc[1] * fenc[1] + fenc[2] * fenc[2]
-        local g = sqrt(1 - f / 4)
-
-        return fenc[1] * g, fenc[2] * g, 1 - f / 2
-    end
 
     local writers_vvd_data = {
         f = function(_f, v) _f:WriteFloat(v) end,
@@ -779,9 +803,8 @@ else
         b = function(_f, v) _f:WriteByte(v) end,
         s = function(_f, v) _f:Write(v) end,
         F = function(_f, v) if v == 1 then v = 1 else v = -1 end _f:WriteFloat(v) end,
-        c = function(_f, _, data, i)
-            local x, y, z = data[i - 2], data[i - 1], nil
-            x, y, z = decode_normal(x, y)
+        c = function(_f, v)
+            x, y, z = decode_normal(v)
             _f:WriteFloat(x) _f:WriteFloat(y) _f:WriteFloat(z)
         end
     }
@@ -900,3 +923,54 @@ else
         netlib_send(user)
     end)
 end
+
+if not CLIENT then return end
+
+concommand.Add("mdt_normalpack_test", function()
+    local function angular_error(orig, dec)
+        local dot = orig[1] * dec[1] + orig[2] * dec[2] + orig[3] * dec[3]
+        dot = math_max(-1, math_min(1, dot))
+        return math.deg(math.acos(dot))
+    end
+
+    local normals = {}
+
+    math.randomseed(os.time())
+
+    local function random_normal()
+        local u1 = math.random()
+        local u2 = math.random()
+
+        local phi = 2 * math_pi * u1
+        local theta = math.acos(2 * u2 - 1)
+
+        local sin_theta = math.sin(theta)
+        return {
+            sin_theta * math.cos(phi),
+            sin_theta * math.sin(phi),
+            math.cos(theta)
+        }
+    end
+
+    for i = 1, 100000 do
+        normals[i] = random_normal()
+    end
+
+    local max_error = 0
+    local avg_error = 0
+
+    for i, v in ipairs(normals) do
+        local packed = encode_normal(v[1], v[2], v[3])
+        local x, y, z = decode_normal(packed)
+        local err = angular_error(v, {x, y, z})
+
+        max_error = math.max(max_error, err)
+        avg_error = avg_error + err
+    end
+
+    avg_error = avg_error / #normals
+
+    print("phi:", B_PHI, "bits:", B_PHI + B_THETA)
+    print(string.format("maximum angular error: %.5f°", max_error))
+    print(string.format("average angular error: %.5f°", avg_error))
+end)
