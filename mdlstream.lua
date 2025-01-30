@@ -146,9 +146,7 @@ if CLIENT then
         local seq = {}
 
         -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float, c: calculated
-        local counts = {
-            f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0
-        }
+        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0}
 
         local function reader(type_str, type_char, p1)
             return function()
@@ -260,9 +258,6 @@ if CLIENT then
     local netlib_wstring   = net.WriteString
     local netlib_toserver  = net.SendToServer
 
-    local cfile_eof        = FindMetaTable("File").EndOfFile
-    local cfile_rbyte      = FindMetaTable("File").ReadByte
-
     local str_ext_fromfile = string.GetExtensionFromFilename
 
     local fun_donothing    = function() end
@@ -311,10 +306,6 @@ if CLIENT then
     end
 
     local mdl_versions = {
-        --- Known: 4 is "HLAlpha", 6, 10 is "HLStandardSDK" related
-        -- 14 is used in "Half-Life SDK", too old
-        -- [2531] = true, [27] = true, [28] = true, [29] = true,
-        -- [30]   = true, [31] = true, [32] = true, [35] = true, [36] = true, [37] = true,
         [44] = true, [45] = true, [46] = true, [47] = true, [48] = true, [49] = true,
         [52] = true, [53] = true, [54] = true, [55] = true, [56] = true, [58] = true, [59] = true
     }
@@ -366,9 +357,9 @@ if CLIENT then
     -- TODO: clientside postpone frame dispatch when ping too high/unstable, and a state machine serverside
     local function send_request(path, callback)
         local ext = str_ext_fromfile(path)
-        assert(isstring(path),            mstr"'path' is not a string")
+        assert(isstring(path), mstr"'path' is not a string")
+        assert(file_formats[ext], mstr"Tries to send unsupported file, " .. path)
         assert(file.Exists(path, "GAME"), mstr"Desired filepath does not exist on client, " .. path)
-        assert(file_formats[ext],         mstr"Tries to send unsupported file, "            .. path)
 
         local size = file_size(path, "GAME")
 
