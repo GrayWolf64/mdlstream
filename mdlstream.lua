@@ -28,16 +28,18 @@ mdlstream = {}
 ---
 --* Switches
 --
+-- `flag_nonormalpack`: Disables normal vector packing used in vvd to reduce net bandwidth
 -- `flag_testing`:  Disables file existence check serverside
 -- `flag_noclui`:   Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
 -- `flag_allperm`:  Disables permission(admin) check when performing certain non-programmatic actions, like `request`
 -- `flag_keepobj`:  True to keep original downloaded file, false to only keep encapsulated .gma
 -- `flag_nohdrchk`: Disables valve file header check, used for testing with randomly generated file
-local flag_testing  = true
-local flag_noclui   = false
-local flag_allperm  = true
-local flag_keepobj  = true
-local flag_nohdrchk = false
+local flag_nonormalpack = true
+local flag_testing      = true
+local flag_noclui       = false
+local flag_allperm      = true
+local flag_keepobj      = true
+local flag_nohdrchk     = false
 
 --- Shared konstants(not necessarily)
 -- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
@@ -143,8 +145,8 @@ if CLIENT then
         local data = {}
         local seq = {}
 
-        -- f: float, l: long, b: byte, s: string, F: 1 or -1 but is float, c: calculated
-        local counts = {f = 0, l = 0, b = 0, s = 0, F = 0, c = 0}
+        -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float, c: calculated
+        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0}
 
         local function reader(type_str, type_char, p1)
             return function()
@@ -157,15 +159,28 @@ if CLIENT then
 
         local function read_normal()
             local x0, y0, z0 = _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()
-            local packed = encode_normal(x0, y0, z0)
-            data[#data + 1] = packed seq[#seq + 1] = "c" counts.c = counts.c + 1
+
+            if not flag_nonormalpack then
+                local packed = encode_normal(x0, y0, z0)
+                data[#data + 1] = packed seq[#seq + 1] = "c" counts.c = counts.c + 1
+            else
+                data[#data + 1] = x0 seq[#seq + 1] = "f" counts.f = counts.f + 1
+                data[#data + 1] = y0 seq[#seq + 1] = "f" counts.f = counts.f + 1
+                data[#data + 1] = z0 seq[#seq + 1] = "f" counts.f = counts.f + 1
+            end
 
             x0, y0, z0 = nil, nil, nil
+        end
+
+        local function section_end()
+            data[#data + 1] = _f:Tell() seq[#seq + 1] = "e"
+            counts.e = counts.e + 1
         end
 
         local float = reader("Float", "f")
         local float0 = reader("Float", "F")
         local long = reader("Long", "l")
+        local seekpos = reader("Long", "k")
         local byte = reader("Byte", "b")
         local str4 = reader("", "s", 4)
 
@@ -179,9 +194,9 @@ if CLIENT then
         long() long() long() long() long() long() long()
 
         local numfixups = long()
-        local fixuptablestart = long()
-        local vertexdatastart = long()
-        local tangentdatastart = long()
+        local fixuptablestart = seekpos()
+        local vertexdatastart = seekpos()
+        local tangentdatastart = seekpos()
 
         if numfixups > 0 then
             _f:Seek(fixuptablestart)
@@ -189,6 +204,8 @@ if CLIENT then
             for _ = 1, numfixups do
                 long() long() long()
             end
+
+            section_end()
         end
 
         if numlods > 0 then
@@ -208,6 +225,8 @@ if CLIENT then
 
                 float() float()
             end
+
+            section_end()
         end
 
         _f:Seek(tangentdatastart)
@@ -217,6 +236,8 @@ if CLIENT then
             read_normal()
             float0()
         end
+
+        section_end()
 
         return {data, seq, counts}
     end
@@ -393,14 +414,18 @@ if CLIENT then
     local writers_vvd_data = {
         f = function(v) net.WriteFloat(v) end,
         l = function(v) net.WriteInt(v, 32) end,
+        k = function(v) net.WriteInt(v, 32) end,
+        e = function(v) net.WriteInt(v, 32) end,
         b = function(v) netlib_wuintm(v) end,
         s = function(v) netlib_wstring(v) end,
-        F = function(v) net.WriteBit(v == 1) end,
+        F = function(v) net.WriteBit(v > 0) end,
         c = function(v) net.WriteUInt(v, packed_normal_bits) end
     }
     local sizes = {
         f = 4,
         l = 4,
+        k = 4,
+        e = 4,
         b = 1,
         s = 4,
         F = 0.125,
@@ -459,7 +484,8 @@ if CLIENT then
         local exceeds_max, pos
         if _mode == 10 then
             local counts = ctemp[uid][1][3]
-            local actual_size = counts.f * sizes.f + counts.l * sizes.l + counts.b + counts.s * sizes.s + counts.F * sizes.F
+            local actual_size = counts.f * sizes.f + counts.l * sizes.l
+                + counts.k * sizes.k + counts.e * sizes.e + counts.b * sizes.b + counts.s * sizes.s + counts.F * sizes.F
 
             exceeds_max = actual_size > realmax_msg_size
             w_framemode_vvd(exceeds_max)
@@ -570,24 +596,11 @@ if CLIENT then
         return
     end
 
-local logo_ascii
-= [[
-M     M DDDDDD  L        SSSSS
-MM   MM D     D L       S     S TTTTT RRRRR  EEEEEE   AA   M    M
-M M M M D     D L       S         T   R    R E       A  A  MM  MM
-M  M  M D     D L        SSSSS    T   R    R EEEEE  A    A M MM M
-M     M D     D L             S   T   RRRRR  E      AAAAAA M    M
-M     M D     D L       S     S   T   R   R  E      A    A M    M
-M     M DDDDDD  LLLLLLL  SSSSS    T   R    R EEEEEE A    A M    M
-
-MDLStream (Simple) Debugger - Licensed under Apache License 2.0
-]]
-
     local surf_set_drawcolor, surf_setmaterial, surf_drawrect, surf_drawrect_outline, surf_drawrect_textured
     = surface.SetDrawColor, surface.SetMaterial, surface.DrawRect, surface.DrawOutlinedRect, surface.DrawTexturedRect
 
     concommand.Add("mdt", function()
-        if stdout:GetText() == "" then stdout:append(logo_ascii, true) end
+        if stdout:GetText() == "" then stdout:append("MDLStream (Simple) Debugger - Licensed under Apache License 2.0", true) end
 
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
@@ -619,34 +632,56 @@ MDLStream (Simple) Debugger - Licensed under Apache License 2.0
             self:DrawTextEntryText(color_black, self:GetHighlightColor(), self:GetCursorColor())
         end
 
-        -- TODO: make it more stable
         local cmds = {
-            request   = function(_s)
+            request = function(args)
                 if LocalPlayer():IsAdmin() or flag_allperm then
-                    send_request(str_sub(_s, 9, #_s))
+                    send_request(args)
                 else
                     stdout:append("access violation: not admin", true)
                 end
             end,
-            showtemp  = function(_s)
-                if table.IsEmpty(ctemp) then stdout:append("ctemp empty", true) return end
-                for i, t in pairs(ctemp) do stdout:append(str_fmt("id = %i, path = %s", i, t[2]), true) end
+
+            showtemp = function()
+                if table.IsEmpty(ctemp) then
+                    stdout:append("ctemp empty", true)
+                    return
+                end
+                for i, t in ipairs(ctemp) do
+                    stdout:append(string.format("id = %i, path = %s", i, t[2]), true)
+                end
             end,
-            myrealmax = function() stdout:append(realmax_msg_size, true) end,
-            clearcon  = function() stdout:SetText("") end
+
+            myrealmax = function()
+                stdout:append(realmax_msg_size, true)
+            end,
+
+            clearcon = function()
+                stdout:SetText("")
+            end
         }
 
-        cmd.GetAutoComplete = function(_, _s)
-            local t = {}
-            for _c in pairs(cmds) do if str_startswith(_c, _s) then t[#t + 1] = _c end end
-            return t
+        cmd.GetAutoComplete = function(_, partial)
+            local suggestions = {}
+            for cmdName in pairs(cmds) do
+                if string.StartWith(cmdName, partial) then
+                    table.insert(suggestions, cmdName)
+                end
+            end
+            return suggestions
         end
 
-        cmd.OnEnter = function(self, _s)
-            stdout:append("< " .. _s)
-            local match = false
-            for _c , _f in pairs(cmds) do if str_startswith(_s, _c) then _f(_s) match = true end end
-            if not match then stdout:append("syntax error!", true) else self:AddHistory(_s) end
+        cmd.OnEnter = function(self, input)
+            stdout:append("< " .. input)
+
+            local command, args = string.match(input, "^%s*(%S+)%s*(.-)%s*$")
+
+            if command and cmds[command] then
+                cmds[command](args)
+                self:AddHistory(input)
+            else
+                stdout:append("syntax error: unknown command", true)
+            end
+
             self:SetText("")
         end
     end)
@@ -791,20 +826,24 @@ else
     local readers_vvd_data = {
         f = function() return net.ReadFloat() end,
         l = function() return net.ReadInt(32) end,
+        k = function() return net.ReadInt(32) end,
+        e = function() return net.ReadInt(32) end,
         b = function() return netlib_ruintm() end,
         s = function() return netlib_rstring() end,
-        F = function() return net.ReadBit() and 1 or -1 end,
+        F = function() return net.ReadBit() end,
         c = function() return net.ReadUInt(packed_normal_bits) end
     }
 
     local writers_vvd_data = {
         f = function(_f, v) _f:WriteFloat(v) end,
         l = function(_f, v) _f:WriteLong(v) end,
+        k = function(_f, v) _f:WriteLong(v) end,
+        e = function() end,
         b = function(_f, v) _f:WriteByte(v) end,
         s = function(_f, v) _f:Write(v) end,
-        F = function(_f, v) if v == 1 then v = 1 else v = -1 end _f:WriteFloat(v) end,
+        F = function(_f, v) if v == 1 then v = 1.0 else v = -1.0 end _f:WriteFloat(v) end,
         c = function(_f, v)
-            x, y, z = decode_normal(v)
+            local x, y, z = decode_normal(v)
             _f:WriteFloat(x) _f:WriteFloat(y) _f:WriteFloat(z)
         end
     }
@@ -853,8 +892,20 @@ else
 
             local _file = file_open(path, "wb", "DATA")
 
-            for k, v in ipairs(temp[uid][1]) do
-                writers_vvd_data[temp[uid][5][k]](_file, v, temp[uid][1], k)
+            local sectionstart_pos = {}
+            local sectionend_count = 0
+            for k, v in ipairs(temp[uid][5]) do
+                if v == "k" then
+                    sectionstart_pos[#sectionstart_pos + 1] = temp[uid][1][k]
+                elseif v == "e" then
+                    sectionend_count = sectionend_count + 1
+
+                    if k < #temp[uid][5] then
+                        _file:Seek(sectionstart_pos[sectionend_count + 1])
+                    end
+                end
+
+                writers_vvd_data[v](_file, temp[uid][1][k])
             end
 
             _file:Close()
@@ -926,6 +977,7 @@ end
 
 if not CLIENT then return end
 
+local num_normals = 1e6
 concommand.Add("mdt_normalpack_test", function()
     local function angular_error(orig, dec)
         local dot = orig[1] * dec[1] + orig[2] * dec[2] + orig[3] * dec[3]
@@ -952,7 +1004,7 @@ concommand.Add("mdt_normalpack_test", function()
         }
     end
 
-    for i = 1, 100000 do
+    for i = 1, num_normals do
         normals[i] = random_normal()
     end
 
@@ -971,6 +1023,7 @@ concommand.Add("mdt_normalpack_test", function()
     avg_error = avg_error / #normals
 
     print("phi:", B_PHI, "bits:", B_PHI + B_THETA)
+    print("random normals:", num_normals)
     print(string.format("maximum angular error: %.5f°", max_error))
     print(string.format("average angular error: %.5f°", avg_error))
 end)
