@@ -3,7 +3,7 @@
 -- For use with addons which require clientside model files to be sent to server
 --
 -- Specifications:
--- Max file size: 8.75 MB
+-- Max file size: 8.388608 MB
 -- Limited file formats
 -- Handshake styled transmission
 --
@@ -19,7 +19,7 @@
 --
 -- More on MDL: https://developer.valvesoftware.com/wiki/MDL_(Source)
 -- Thanks to: https://github.com/ZeqMacaw/Crowbar/tree/master/Crowbar/Core/GameModel for some crucial hints on mdl header1
--- Torture when unearthing a mdl structure: https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp
+-- Torture when unearthing mdl structure: https://github.com/RaphaelIT7/sourcesdk-gmod/blob/main/utils/studiomdl/write.cpp
 --
 if not gmod or game.SinglePlayer() then return end
 
@@ -146,7 +146,9 @@ if CLIENT then
         local seq = {}
 
         -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float, c: calculated
-        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0}
+        local counts = {
+            f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0
+        }
 
         local function reader(type_str, type_char, p1)
             return function()
@@ -164,9 +166,10 @@ if CLIENT then
                 local packed = encode_normal(x0, y0, z0)
                 data[#data + 1] = packed seq[#seq + 1] = "c" counts.c = counts.c + 1
             else
-                data[#data + 1] = x0 seq[#seq + 1] = "f" counts.f = counts.f + 1
-                data[#data + 1] = y0 seq[#seq + 1] = "f" counts.f = counts.f + 1
-                data[#data + 1] = z0 seq[#seq + 1] = "f" counts.f = counts.f + 1
+                data[#data + 1] = x0 seq[#seq + 1] = "f"
+                data[#data + 1] = y0 seq[#seq + 1] = "f"
+                data[#data + 1] = z0 seq[#seq + 1] = "f"
+                counts.f = counts.f + 3
             end
 
             x0, y0, z0 = nil, nil, nil
