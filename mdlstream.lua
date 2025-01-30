@@ -594,7 +594,9 @@ if CLIENT then
     = surface.SetDrawColor, surface.SetMaterial, surface.DrawRect, surface.DrawOutlinedRect, surface.DrawTexturedRect
 
     concommand.Add("mdt", function()
-        if stdout:GetText() == "" then stdout:append("MDLStream (Simple) Debugger - Licensed under Apache License 2.0", true) end
+        if stdout:GetText() == "" then
+            stdout:append("MDLStream (Simple) Debugger - Licensed under Apache License 2.0\n", true)
+        end
 
         local window = vgui.Create("DFrame")
         window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
@@ -945,8 +947,8 @@ else
 
             local dt = systime() - temp[uid][3]
             print(
-                str_fmt(mstr"took %s recv & build '%s' from %s, avg spd %s/s",
-                    string.FormattedTime(dt, "%02i:%02i:%02i"),
+                str_fmt(mstr"took %.1f sec recv & build '%s' from %s, avg spd %s/s",
+                    dt,
                     path,
                     user:SteamID64(),
                     string.NiceSize(
