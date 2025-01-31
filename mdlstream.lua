@@ -528,8 +528,6 @@ if CLIENT then
                 stdout:append("starting frame sent: " .. filename, true)
             elseif _mode == 101 or _mode == 11 then
                 stdout:append(str_fmt("progress: %s %u%%", filename, math.floor((pos / #data) * 100)), true)
-            elseif _mode == 91 then
-                stdout:append("type sequence sent: " .. filename, true)
             end
         else
             if _mode == 100 or _mode == 101 then stdout:append("last frame sent: " .. filename, true) end
