@@ -27,21 +27,22 @@ mdlstream = {}
 
 /*
 * Switches
+* `flag_testing`: Disables file existence check serverside
+* `flag_noclui`: Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
+* `flag_allperm`: Disables permission(admin) check when performing certain non-programmatic actions, like `request`
+* `flag_keepobj`: True to keep original downloaded file, false to only keep encapsulated .gma
+* `flag_nohdrchk`: Disables valve file header check, used for testing with randomly generated file
 */
--- `flag_testing`:  Disables file existence check serverside
--- `flag_noclui`:   Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
--- `flag_allperm`:  Disables permission(admin) check when performing certain non-programmatic actions, like `request`
--- `flag_keepobj`:  True to keep original downloaded file, false to only keep encapsulated .gma
--- `flag_nohdrchk`: Disables valve file header check, used for testing with randomly generated file
 local flag_testing      = true
 local flag_noclui       = false
 local flag_allperm      = true
 local flag_keepobj      = true
 local flag_nohdrchk     = false
 
---- Shared konstants(not necessarily)
--- ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
---
+/*
+* Shared constants(not necessarily)
+* ! Unless otherwise stated, all the numbers related to msg sizes are all in 'bytes'
+*/
 local tonumber   = tonumber
 local isvalid    = IsValid
 local systime    = SysTime
@@ -61,24 +62,26 @@ local netlib_ruint64      = net.ReadUInt64
 local netlib_wuint        = function(_uint) net.WriteUInt(_uint, 24) end
 local netlib_ruint        = function() return net.ReadUInt(24) end
 
---- dedicated to read and write response mode, max = 255
---
---   0: Server has refused request(file already exists on server)
---   1: Server has built file and sends an ack for finalization
---   2: Server has refused request, whose serverside temp isn't allocated properly ahead of time
---
---  91: Server requests client to send vvd data type sequence
---  92: Client sends vvd data type seq
---  10: Server has received vvd data type seq and awaits data
---  11: Server awaits subsequent vvd data
---  93: similar to 200, but for vvd
---  94: similar to 201, but for vvd
---
--- 100: Server has accepted Client's request, awaits the first frame
--- 101: Server awaits subsequent frame
--- 200: Client sends a frame that can be received and built on Server using previously received frames or
---      this request consists only one frame
--- 201: Client sends a frame that requires Server's subsequent frame-save and acknowledgement
+/*
+* Dedicated to read and write response mode, max = 255
+*
+* 0: Server has refused request(file already exists on server)
+* 1: Server has built file and sends an ack for finalization
+* 2: Server has refused request, whose serverside temp isn't allocated properly ahead of time
+*
+* 91: Server requests client to send vvd data type sequence
+* 92: Client sends vvd data type seq
+* 10: Server has received vvd data type seq and awaits data
+* 11: Server awaits subsequent vvd data
+* 93: similar to 200, but for vvd
+* 94: similar to 201, but for vvd
+*
+* 100: Server has accepted Client's request, awaits the first frame
+* 101: Server awaits subsequent frame
+* 200: Client sends a frame that can be received and built on Server using previously received frames or
+*      this request consists only one frame
+* 201: Client sends a frame that requires Server's subsequent frame-save and acknowledgement
+*/
 local netlib_wuintm       = function(_uint) net.WriteUInt(_uint, 8) end
 local netlib_ruintm       = function() return net.ReadUInt(8) end
 
@@ -200,6 +203,7 @@ if CLIENT then
     end
 
     -- FRAME content:
+    -- TODO: recalculate distribution
     -- 3 spared for engine use
     -- 1 for determining the response mode
     -- #content for the actual partial(sliced) compressed string of byte sequence of target file
