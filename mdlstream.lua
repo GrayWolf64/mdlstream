@@ -105,8 +105,10 @@ if CLIENT then
         local data = {}
         local seq = {}
 
-        -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float
-        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0}
+        -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string
+        -- F: 1 or -1 but is float, B: MAX_NUM_LODS = 8(lod: 0~7), a 3 bit UInt will do
+        -- n: MAX_NUM_BONES_PER_VERT = 3(numbones: 0~3), a 2 bit UInt
+        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, B = 0, n = 0}
 
         local function reader(type_str, type_char, p1)
             return function()
@@ -137,7 +139,9 @@ if CLIENT then
         local float0 = reader("Float", "F")
         local long = reader("Long", "l")
         local seekpos = reader("Long", "k")
+        local lod = reader("Long", "B")
         local byte = reader("Byte", "b")
+        local numbones = reader("Byte", "n")
         local str4 = reader("", "s", 4)
 
         str4()
@@ -158,7 +162,7 @@ if CLIENT then
             _f:Seek(fixuptablestart)
 
             for _ = 1, numfixups do
-                long() long() long()
+                lod() long() long()
             end
 
             section_end()
@@ -172,7 +176,7 @@ if CLIENT then
 
                 byte() byte() byte()
 
-                byte()
+                numbones()
 
                 float() float() float()
 
@@ -189,13 +193,10 @@ if CLIENT then
 
         for _ = 1, numlodvertexes0 do
             -- tangents
-            read_normal()
-            float0()
+            read_normal() float0()
         end
 
-        section_end()
-
-        return {data, seq, counts}
+        return data, seq, counts
     end
 
     -- FRAME content:
@@ -330,7 +331,7 @@ if CLIENT then
 
         --- FIXME: actual size reduction needed
         if ext == "vvd" then
-            ctemp[uid] = {[1] = make_vvd_data_seq(file.Open(path, "rb", "GAME")), [2] = path, [3] = callback}
+            ctemp[uid] = {[1] = {make_vvd_data_seq(file.Open(path, "rb", "GAME"))}, [2] = path, [3] = callback}
         else
             ctemp[uid] = {[1] = util.Base64Encode(lzma(file.Read(path, "GAME")), true), [2] = path, [3] = callback}
         end
@@ -367,7 +368,9 @@ if CLIENT then
         e = function(v) net.WriteInt(v, 32) end,
         b = function(v) netlib_wuintm(v) end,
         s = function(v) netlib_wstring(v) end,
-        F = function(v) net.WriteBit(v > 0) end
+        F = function(v) net.WriteBit(v > 0) end,
+        B = function(v) net.WriteUInt(v, 3) end,
+        n = function(v) net.WriteUInt(v, 2) end
     }
     local sizes = {
         f = 4,
@@ -376,7 +379,9 @@ if CLIENT then
         e = 4,
         b = 1,
         s = 4,
-        F = 0.125
+        F = 0.125,
+        B = 0.375,
+        n = 0.25
     }
 
     -- @BUFFER_SENSITIVE
@@ -552,7 +557,7 @@ if CLIENT then
         end
 
         local window = vgui.Create("DFrame")
-        window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.5)
+        window:Center() window:SetSize(ScrW() / 2, ScrH() / 2.8)
         window:SetTitle("MDLStream Debugging Tool") window:MakePopup() window:SetDeleteOnClose(false)
 
         window.lblTitle:SetFont("BudgetLabel")
@@ -779,7 +784,9 @@ else
         e = function() return net.ReadInt(32) end,
         b = function() return netlib_ruintm() end,
         s = function() return netlib_rstring() end,
-        F = function() return net.ReadBit() end
+        F = function() return net.ReadBit() end,
+        B = function() return net.ReadUInt(3) end,
+        n = function() return net.ReadUInt(2) end
     }
 
     local writers_vvd_data = {
@@ -789,7 +796,9 @@ else
         e = function() end,
         b = function(_f, v) _f:WriteByte(v) end,
         s = function(_f, v) _f:Write(v) end,
-        F = function(_f, v) if v == 1 then v = 1.0 else v = -1.0 end _f:WriteFloat(v) end
+        F = function(_f, v) if v == 1 then v = 1.0 else v = -1.0 end _f:WriteFloat(v) end,
+        B = function(_f, v) _f:WriteLong(v) end,
+        n = function(_f, v) _f:WriteByte(v) end
     }
 
     -- TODO: ensure file save failure got dealt with
@@ -844,9 +853,7 @@ else
                 elseif v == "e" then
                     sectionend_count = sectionend_count + 1
 
-                    if k < #temp[uid][5] then
-                        _file:Seek(sectionstart_pos[sectionend_count + 1])
-                    end
+                    _file:Seek(sectionstart_pos[sectionend_count + 1])
                 end
 
                 writers_vvd_data[v](_file, temp[uid][1][k])
