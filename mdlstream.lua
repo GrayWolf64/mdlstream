@@ -28,13 +28,11 @@ mdlstream = {}
 ---
 --* Switches
 --
--- `flag_nonormalpack`: Disables normal vector packing used in vvd to reduce net bandwidth
 -- `flag_testing`:  Disables file existence check serverside
 -- `flag_noclui`:   Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
 -- `flag_allperm`:  Disables permission(admin) check when performing certain non-programmatic actions, like `request`
 -- `flag_keepobj`:  True to keep original downloaded file, false to only keep encapsulated .gma
 -- `flag_nohdrchk`: Disables valve file header check, used for testing with randomly generated file
-local flag_nonormalpack = true
 local flag_testing      = true
 local flag_noclui       = false
 local flag_allperm      = true
@@ -102,51 +100,13 @@ local file_open           = function(_f, _m, _p)
     return __f
 end
 
---- https://www.codeproject.com/Articles/5366994/16bit-Normal-Vectors-Compression-using-Spherical-C
--- Thanks to DeepSeek r1 and me!
-local B_THETA, B_PHI = 12, 12
-local packed_normal_bits = B_THETA + B_PHI
-
-local function encode_normal(x, y, z)
-    local len = math_sqrt(x * x + y * y + z * z) + 1e-7
-    x, y, z = x / len, y / len, z / len
-
-    local MAX_THETA = bit.lshift(1, B_THETA) - 1
-    local MAX_PHI = bit.lshift(1, B_PHI) - 1
-
-    local quant_theta = math_floor((0.5 - 0.5 * z) * (MAX_THETA + 1) + 0.5)
-    quant_theta = math_max(0, math_min(quant_theta, MAX_THETA))
-
-    local phi = math.atan2(y, x)
-    phi = (phi < 0) and (phi + 2 * math_pi) or phi
-    local quant_phi = math_floor(phi / (2 * math_pi) * (MAX_PHI + 1) + 0.5) % (MAX_PHI + 1)
-
-    return bit.bor(bit.lshift(quant_theta, B_PHI), quant_phi)
-end
-
-local function decode_normal(packed)
-    local MAX_THETA = bit.lshift(1, B_THETA) - 1
-    local MAX_PHI = bit.lshift(1, B_PHI) - 1
-
-    local quant_theta = bit.band(bit.rshift(packed, B_PHI), MAX_THETA)
-    local quant_phi = bit.band(packed, MAX_PHI)
-
-    local cos_theta = 1 - (2 * (quant_theta + 0.5)) / (MAX_THETA + 1)
-    cos_theta = math_max(-1, math_min(1, cos_theta))
-    local phi = (quant_phi + 0.5) * (2 * math_pi) / (MAX_PHI + 1)
-
-    local sin_theta = math_sqrt(1 - cos_theta * cos_theta)
-
-    return sin_theta * math.cos(phi), sin_theta * math.sin(phi), cos_theta
-end
-
 if CLIENT then
     local function make_vvd_data_seq(_f)
         local data = {}
         local seq = {}
 
-        -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float, c: calculated
-        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, c = 0}
+        -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string, F: 1 or -1 but is float
+        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0}
 
         local function reader(type_str, type_char, p1)
             return function()
@@ -160,15 +120,10 @@ if CLIENT then
         local function read_normal()
             local x0, y0, z0 = _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()
 
-            if not flag_nonormalpack then
-                local packed = encode_normal(x0, y0, z0)
-                data[#data + 1] = packed seq[#seq + 1] = "c" counts.c = counts.c + 1
-            else
-                data[#data + 1] = x0 seq[#seq + 1] = "f"
-                data[#data + 1] = y0 seq[#seq + 1] = "f"
-                data[#data + 1] = z0 seq[#seq + 1] = "f"
-                counts.f = counts.f + 3
-            end
+            data[#data + 1] = x0 seq[#seq + 1] = "f"
+            data[#data + 1] = y0 seq[#seq + 1] = "f"
+            data[#data + 1] = z0 seq[#seq + 1] = "f"
+            counts.f = counts.f + 3
 
             x0, y0, z0 = nil, nil, nil
         end
@@ -412,8 +367,7 @@ if CLIENT then
         e = function(v) net.WriteInt(v, 32) end,
         b = function(v) netlib_wuintm(v) end,
         s = function(v) netlib_wstring(v) end,
-        F = function(v) net.WriteBit(v > 0) end,
-        c = function(v) net.WriteUInt(v, packed_normal_bits) end
+        F = function(v) net.WriteBit(v > 0) end
     }
     local sizes = {
         f = 4,
@@ -422,8 +376,7 @@ if CLIENT then
         e = 4,
         b = 1,
         s = 4,
-        F = 0.125,
-        c = packed_normal_bits / 8
+        F = 0.125
     }
 
     -- @BUFFER_SENSITIVE
@@ -826,8 +779,7 @@ else
         e = function() return net.ReadInt(32) end,
         b = function() return netlib_ruintm() end,
         s = function() return netlib_rstring() end,
-        F = function() return net.ReadBit() end,
-        c = function() return net.ReadUInt(packed_normal_bits) end
+        F = function() return net.ReadBit() end
     }
 
     local writers_vvd_data = {
@@ -837,11 +789,7 @@ else
         e = function() end,
         b = function(_f, v) _f:WriteByte(v) end,
         s = function(_f, v) _f:Write(v) end,
-        F = function(_f, v) if v == 1 then v = 1.0 else v = -1.0 end _f:WriteFloat(v) end,
-        c = function(_f, v)
-            local x, y, z = decode_normal(v)
-            _f:WriteFloat(x) _f:WriteFloat(y) _f:WriteFloat(z)
-        end
+        F = function(_f, v) if v == 1 then v = 1.0 else v = -1.0 end _f:WriteFloat(v) end
     }
 
     -- TODO: ensure file save failure got dealt with
@@ -970,56 +918,3 @@ else
         netlib_send(user)
     end)
 end
-
-if not CLIENT then return end
-
-local num_normals = 1e6
-concommand.Add("mdt_normalpack_test", function()
-    local function angular_error(orig, dec)
-        local dot = orig[1] * dec[1] + orig[2] * dec[2] + orig[3] * dec[3]
-        dot = math_max(-1, math_min(1, dot))
-        return math.deg(math.acos(dot))
-    end
-
-    local normals = {}
-
-    math.randomseed(os.time())
-
-    local function random_normal()
-        local u1 = math.random()
-        local u2 = math.random()
-
-        local phi = 2 * math_pi * u1
-        local theta = math.acos(2 * u2 - 1)
-
-        local sin_theta = math.sin(theta)
-        return {
-            sin_theta * math.cos(phi),
-            sin_theta * math.sin(phi),
-            math.cos(theta)
-        }
-    end
-
-    for i = 1, num_normals do
-        normals[i] = random_normal()
-    end
-
-    local max_error = 0
-    local avg_error = 0
-
-    for i, v in ipairs(normals) do
-        local packed = encode_normal(v[1], v[2], v[3])
-        local x, y, z = decode_normal(packed)
-        local err = angular_error(v, {x, y, z})
-
-        max_error = math.max(max_error, err)
-        avg_error = avg_error + err
-    end
-
-    avg_error = avg_error / #normals
-
-    print("phi:", B_PHI, "bits:", B_PHI + B_THETA)
-    print("random normals:", num_normals)
-    print(string.format("maximum angular error: %.5f°", max_error))
-    print(string.format("average angular error: %.5f°", avg_error))
-end)
