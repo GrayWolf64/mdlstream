@@ -436,7 +436,8 @@ if CLIENT then
         if _mode == 10 then
             local counts = ctemp[uid][1][3]
             local actual_size = counts.f * sizes.f + counts.l * sizes.l
-                + counts.k * sizes.k + counts.e * sizes.e + counts.b * sizes.b + counts.s * sizes.s + counts.F * sizes.F
+                + counts.k * sizes.k + counts.e * sizes.e + counts.b * sizes.b + counts.s * sizes.s
+                + counts.F * sizes.F + counts.B * sizes.B + counts.n * sizes.n
 
             exceeds_max = actual_size > realmax_msg_size
             w_framemode_vvd(exceeds_max)
