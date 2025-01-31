@@ -25,9 +25,9 @@ if not gmod or game.SinglePlayer() then return end
 
 mdlstream = {}
 
----
---* Switches
---
+/*
+* Switches
+*/
 -- `flag_testing`:  Disables file existence check serverside
 -- `flag_noclui`:   Disables clientside debugger GUI; Routes some terminal(debugger ui) messages to engine console
 -- `flag_allperm`:  Disables permission(admin) check when performing certain non-programmatic actions, like `request`
@@ -538,9 +538,9 @@ if CLIENT then
 
     mdlstream.SendRequest = send_request
 
-    ---
-    --* Debugger part
-    --
+    /*
+    * Debugger UI
+    */
     if flag_noclui then
         stdout.append = function(_s) print(mstr(_s)) end
         stdout:Remove()
