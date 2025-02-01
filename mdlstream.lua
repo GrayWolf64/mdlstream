@@ -100,12 +100,11 @@ end
 
 if CLIENT then
     local function make_vvd_data_seq(_f)
-        local data = {}
-        local seq = {}
+        local data, seq = {}, {}
 
         -- f: float, l: long, k: seek pos, e: section end, b: byte, s: string
         -- F: 1 or -1 but is float, B: MAX_NUM_LODS = 8(lod: 0~7), a 3 bit UInt will do
-        -- n: MAX_NUM_BONES_PER_VERT = 3(numbones: 0~3), a 2 bit UInt
+        -- n: MAX_NUM_BONES_PER_VERT = 3(numbones: 1~3), a 2 bit UInt
         local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, F = 0, B = 0, n = 0}
 
         local function reader(type_str, type_char, p1)
@@ -193,6 +192,8 @@ if CLIENT then
             -- tangents
             read_normal() float0()
         end
+
+        _f:Close()
 
         return data, seq, counts
     end
