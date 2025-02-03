@@ -116,17 +116,6 @@ if CLIENT then
             end
         end
 
-        local function read_normal()
-            local x0, y0, z0 = _f:ReadFloat(), _f:ReadFloat(), _f:ReadFloat()
-
-            data[#data + 1] = x0 seq[#seq + 1] = "f"
-            data[#data + 1] = y0 seq[#seq + 1] = "f"
-            data[#data + 1] = z0 seq[#seq + 1] = "f"
-            counts.f = counts.f + 3
-
-            x0, y0, z0 = nil, nil, nil
-        end
-
         local function section_end()
             data[#data + 1] = _f:Tell() seq[#seq + 1] = "e"
             counts.e = counts.e + 1
@@ -177,8 +166,7 @@ if CLIENT then
 
                 float() float() float()
 
-                -- normals
-                read_normal()
+                float() float() float()
 
                 float() float()
             end
@@ -189,14 +177,160 @@ if CLIENT then
         _f:Seek(tangentdatastart)
 
         for _ = 1, numlodvertexes0 do
-            -- tangents
-            read_normal() float0()
+            float() float() float() float0()
         end
 
         _f:Close()
 
         return data, seq, counts
     end
+
+    local function make_phy_data_seq(_f)
+        local data, seq = {}, {}
+
+        local counts = {f = 0, l = 0, k = 0, e = 0, b = 0, s = 0, S = 0, U = 0, F = 0, B = 0, n = 0}
+
+        local function reader(type_str, type_char, p1)
+            return function()
+                data[#data + 1] = _f["Read" .. type_str](_f, p1)
+                seq[#seq + 1] = type_char
+                counts[type_char] = counts[type_char] + 1
+                return data[#data]
+            end
+        end
+
+        local function section_end()
+            data[#data + 1] = _f:Tell() seq[#seq + 1] = "e"
+            counts.e = counts.e + 1
+        end
+
+        local float = reader("Float", "f")
+        local long = reader("Long", "l")
+        local short = reader("Short", "S")
+        local ushort = reader("UShort", "U")
+        local seekpos = reader("Long", "k")
+        local byte = reader("Byte", "b")
+        local str4 = reader("", "s", 4)
+
+        -- phyheader_s
+        long()
+        long()
+        local numsolids = long()
+        long()
+
+        local collisiondata_size
+        local vertexdata_pos
+        local vertexdata_offset
+        local facedata_pos
+        local numtriangles
+        for _ = 1, numsolids do
+
+            collisiondata_size = long() -- int size = physcollision->CollideSize( pPhys->m_pCollisionData );
+
+            -- struct compactsurfaceheader_t : public physcollideheader_t
+            str4() -- "VPHY"
+            short() -- 256
+            short()
+            long() -- surfaceSize
+            float() float() float() -- dragAxisAreas
+            long() -- axisMapSize = 0 "NOTE: not yet supported"
+
+            -- m_pCompactSurface(IVP_Compact_Surface)???
+            -- https://github.com/nillerusr/source-physics/blob/47533475e01cbff05fbc3bbe8b4edc485f292cea/ivp_surface_manager/ivp_compact_surface.hxx#L39
+            float() float() float()
+            float() float() float()
+            float()
+            long() -- PACKED_1: max_factor_surface_deviation:8 + byte_size:24
+            long()
+            -- dummy
+            long() long() str4() -- "IVPS"
+
+            local vertices = {}
+            vertexdata_pos = _f:Tell() + collisiondata_size
+            while _f:Tell() < vertexdata_pos do
+                facedata_pos = _f:Tell()
+                -- https://github.com/nillerusr/source-physics/blob/47533475e01cbff05fbc3bbe8b4edc485f292cea/ivp_collision/ivp_compact_ledge.hxx#L138
+                vertexdata_offset = long() --? pointOffset
+
+                vertexdata_pos = facedata_pos + vertexdata_offset
+
+                long() --? boneIndex
+                -- PACKED_2:
+                --  unsigned int has_chilren_flag:2;
+                --  IVP_BOOL is_compact_flag:2;
+                --  unsigned int dummy:4;
+                --  unsigned int size_div_16:24;
+                long()
+                numtriangles = short()
+                short() -- "for_future_use"
+
+                local vertex
+                for __ = 1, numtriangles do
+                    -- https://github.com/nillerusr/source-physics/blob/47533475e01cbff05fbc3bbe8b4edc485f292cea/ivp_collision/ivp_compact_ledge.hxx#L85
+                    -- PACKED_3:
+                    -- unsigned int tri_index:12;
+                    -- unsigned int pierce_index:12;
+                    -- unsigned int material_index:7;
+                    -- unsigned int is_virtual:1;
+                    byte()
+                    byte()
+                    short()
+
+                    for ___ = 1, 3 do
+                        -- https://github.com/nillerusr/source-physics/blob/47533475e01cbff05fbc3bbe8b4edc485f292cea/ivp_collision/ivp_compact_ledge.hxx#L41
+                        -- PACKED_4:
+                        -- unsigned int start_point_index:16;
+                        -- signed   int opposite_index:15;
+                        -- unsigned int   is_virtual:1;
+                        vertex = short()
+                        short()
+                        if not vertices[vertex] then
+                            vertices[vertex] = true
+                        end
+                    end
+                end
+
+            end
+
+            for __ = 1, table.Count(vertices) do
+                float() float() float() float()
+            end
+
+            --- TODO: final 28 byte section
+            -- known: 4 bytes
+            --byte1=0
+            --byte2=0
+            --byte3=0
+            --byte4=0
+            --byte5?
+            --byte6?
+            --byte7 =255
+            --byte8 =255
+            --byte9~27?
+            --byte28 =0
+            long()
+            long()
+            long()
+            long()
+            long()
+            long()
+            long()
+        end
+
+        local textsection = _f:Read()
+        textsection = str_sub(textsection, 1, #textsection - 2) -- ignore \n and NULL
+
+        -- TODO: parse text
+
+        _f:Close()
+
+        return data, seq, counts
+    end
+
+    -- "models/player/alyx.phy"
+    make_phy_data_seq(file.Open("models/player/alyx.phy", "rb", "GAME"))
+    --PrintTable(({make_phy_data_seq(file.Open("models/hunter/triangles/1x1x1.phy", "rb", "GAME"))})[1])
+    --print("models/hunter/triangles/1x1x1.phy file size", file.Size("models/hunter/triangles/1x1x1.phy", "GAME"))
 
     -- FRAME content:
     -- TODO: recalculate distribution
