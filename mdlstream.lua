@@ -287,7 +287,9 @@ if CLIENT then
 
         local textsection = _f:Read()
         textsection = str_sub(textsection, 1, #textsection - 2) -- ignore \n and NULL
-        -- TODO: parse text
+
+        -- TODO: is there a better way other than compressing the text section?
+        data[#data + 1] = util.Compress(textsection) seq[#seq + 1] = "s"
 
         _f:Close()
 
