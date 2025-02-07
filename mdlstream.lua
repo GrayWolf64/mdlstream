@@ -633,9 +633,10 @@ if CLIENT then
 
     mdlstream.SendRequest = send_request
 
-    /*
-    * Debugger UI
-    */
+
+    ---
+    -- Debugger UI
+    --
     if flag_noclui then
         stdout.append = function(_s) print(mstr(_s)) end
         stdout:Remove()
